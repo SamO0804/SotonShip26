@@ -1,4 +1,4 @@
-"""Blindspot check 4: the advisory check (LLM + code).
+"""Blindspot check 3: the advisory check (LLM + code).
 
     python -m blindspot.checks.advisory
     python -m blindspot.checks.advisory advisories/other_alert.md --data data/sample
@@ -251,13 +251,23 @@ def main() -> None:
     args = ap.parse_args()
     d = args.data
 
-    raw = extract(args.advisory.read_text())
-    patterns, untestable, warnings = validate(raw)
-    (d / "advisory_patterns.json").write_text(json.dumps(
+    saved = d / "advisory_patterns.json"
+    try:
+        raw = extract(args.advisory.read_text())
+        patterns, untestable, warnings = validate(raw)
+        print(f"LLM extracted {len(raw.get('patterns', []))} patterns; "
+              f"{len(patterns)} passed validation")
+    except Exception as e:  # noqa: BLE001  LLM offline, no key, rate limit...
+        # Patterns depend only on the advisory text, so the last extraction of the
+        # SAME advisory is still valid; only the search below needs re-running.
+        prev = json.loads(saved.read_text()) if saved.exists() else {}
+        if prev.get("advisory") != str(args.advisory):
+            raise
+        print(f"LLM unavailable ({e}); reusing the patterns last extracted from this advisory")
+        patterns, untestable, warnings = prev["patterns"], prev["untestable"], prev["warnings"]
+    saved.write_text(json.dumps(
         {"advisory": str(args.advisory), "patterns": patterns, "untestable": untestable,
          "warnings": warnings}, indent=2))
-
-    print(f"LLM extracted {len(raw.get('patterns', []))} patterns; {len(patterns)} passed validation")
     for w in warnings:
         print("  warning:", w)
     for p in patterns:

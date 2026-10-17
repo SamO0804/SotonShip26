@@ -1,4 +1,4 @@
-"""Blindspot check 3: the calibration check.
+"""Blindspot check 2: the calibration check (rule weights).
 
     python -m blindspot.checks.calibration
     python -m blindspot.checks.calibration --data data/sample
@@ -27,6 +27,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from .. import rulebook as rbk
 from .. import schema
 
 MIN_INVESTIGATED = 10
@@ -42,13 +43,13 @@ def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     return max(0.0, centre - half), min(1.0, centre + half)
 
 
-def points_for(hit_rate: float) -> int:
+def points_for(hit_rate: float, threshold: int = schema.CASE_THRESHOLD) -> int:
     """Suggested weight: a rule right X% of the time earns X% of a case.
-    So a rule right half the time gets 10 points, two hits open a case."""
-    return int(np.clip(round(schema.CASE_THRESHOLD * hit_rate), 1, schema.CASE_THRESHOLD))
+    With a 20-point threshold, a rule right half the time gets 10 points."""
+    return int(np.clip(round(threshold * hit_rate), 1, threshold))
 
 
-def calibration_table(alerts, rules, inv) -> pd.DataFrame:
+def calibration_table(alerts, rules, inv, threshold: int = schema.CASE_THRESHOLD) -> pd.DataFrame:
     base = inv["sar_filed"].mean() if len(inv) else 0.0
     rows = []
     for _, r in rules.iterrows():
@@ -62,9 +63,9 @@ def calibration_table(alerts, rules, inv) -> pd.DataFrame:
         if n >= MIN_INVESTIGATED:
             # Report only gaps the whole confidence interval supports AND that matter:
             # at least double (or half) the weight, and at least MIN_GAP points apart.
-            if points_for(lo) >= max(2 * pts, pts + MIN_GAP):
+            if points_for(lo, threshold) >= max(2 * pts, pts + MIN_GAP):
                 verdict = "under-weighted"
-            elif points_for(hi) <= min(pts / 2, pts - MIN_GAP):
+            elif points_for(hi, threshold) <= min(pts / 2, pts - MIN_GAP):
                 verdict = "over-weighted"
             else:
                 verdict = "reasonable"
@@ -73,13 +74,14 @@ def calibration_table(alerts, rules, inv) -> pd.DataFrame:
             "customers_alerted": len(alerted), "investigated": n, "sars": k,
             "hit_rate": rate, "ci_low": lo, "ci_high": hi,
             "lift": rate / base if n and base else np.nan,
-            "suggested_points": points_for(rate) if n else np.nan,
+            "suggested_points": points_for(rate, threshold) if n else np.nan,
             "verdict": verdict,
         })
     return pd.DataFrame(rows)
 
 
-def findings(cal: pd.DataFrame, alerts: pd.DataFrame) -> pd.DataFrame:
+def findings(cal: pd.DataFrame, alerts: pd.DataFrame,
+             threshold: int = schema.CASE_THRESHOLD) -> pd.DataFrame:
     rows = []
     for _, r in cal[cal["verdict"].isin(["under-weighted", "over-weighted"])].iterrows():
         under = r["verdict"] == "under-weighted"
@@ -102,7 +104,7 @@ def findings(cal: pd.DataFrame, alerts: pd.DataFrame) -> pd.DataFrame:
             "explanation": (f"{r['description']}. When investigators reviewed customers this rule "
                             f"flagged, {100 * r['hit_rate']:.0f}% were laundering, "
                             f"{r['lift']:.1f}x the average, yet it adds only {r['points']} of the "
-                            f"{schema.CASE_THRESHOLD} points needed for a case."
+                            f"{threshold} points needed for a case."
                             if under else
                             f"{r['description']}. Only {100 * r['hit_rate']:.0f}% of reviewed "
                             f"customers it flagged were laundering, but it is worth "
@@ -121,8 +123,10 @@ def main() -> None:
     rules = pd.read_parquet(d / "rules.parquet")
     inv = pd.read_parquet(d / "investigations.parquet")
 
-    cal = calibration_table(alerts, rules, inv)
-    fnd = findings(cal, alerts)
+    rb = rbk.used(d)   # the bank's own case threshold, if the engine recorded its rulebook
+    threshold = rb["case_threshold"] if rb else schema.CASE_THRESHOLD
+    cal = calibration_table(alerts, rules, inv, threshold)
+    fnd = findings(cal, alerts, threshold)
     cal.to_parquet(d / "calibration.parquet", index=False)
     fnd.to_parquet(d / "findings_calibration.parquet", index=False)
 

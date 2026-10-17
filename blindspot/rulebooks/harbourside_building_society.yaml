@@ -1,0 +1,64 @@
+# Harbourside Building Society: transaction monitoring rulebook
+#
+# FICTIONAL test rulebook. A traditional, cautious lender whose rules were last
+# reviewed years ago. Its predicted weaknesses are written down in
+# rulebooks/PREDICTIONS.md BEFORE it was ever run through Blindspot.
+
+bank: Harbourside Building Society
+version: "2019-03"
+
+case_threshold: 20
+window_days: 396
+
+# Last updated in 2019: no Belarus, Georgia, UAE, Turkey, Morocco or Mexico.
+high_risk_countries: [Iran, North Korea, Syria, Russia, Myanmar]
+
+suppression:
+  valued_clients_top_n: 0
+
+rules:
+  - id: H01_large_cash
+    description: Cash deposit of £10,000 or more
+    points: 8
+    applies_to: {payment_types: [cash_deposit], direction: in}
+    trigger: {type: single, amount_min: 10000}
+
+  - id: H02_sanctioned_country
+    description: Wire or cross-border payment to or from a high-risk country
+    points: 10
+    applies_to: {payment_types: [wire, cross_border], direction: any}
+    trigger: {type: single, countries: high_risk}
+
+  - id: H03_very_large_wire
+    description: Wire or cross-border payment of £100,000 or more
+    points: 10
+    applies_to: {payment_types: [wire, cross_border], direction: any}
+    trigger: {type: single, amount_min: 100000}
+
+  - id: H04_busy_account
+    description: 8 or more outgoing payments in a 30-day period
+    points: 8
+    applies_to:
+      direction: out
+      payment_types: [cash_withdrawal, cheque, ach, credit_card, card_repayment,
+                      debit_card, cross_border, wire]
+    trigger: {type: velocity, window_days: 30, min_count: 8}
+
+  - id: H05_large_payment
+    description: Cheque, ACH payment or cash withdrawal of £25,000 or more
+    points: 3
+    applies_to: {payment_types: [cheque, ach, cash_withdrawal], direction: out}
+    trigger: {type: single, amount_min: 25000}
+
+  - id: H06_split_money_orders
+    description: 2 or more money orders paid in on one day, totalling £2,000-£2,499
+    points: 7
+    applies_to: {payment_types: [money_order], direction: in}
+    trigger: {type: aggregate, window_days: 1, min_count: 2,
+              min_total: 2000, max_total: 2499.99}
+
+  - id: H07_card_repayment_funnel
+    description: Repaying the credit cards of 10 or more different people within 90 days
+    points: 20
+    applies_to: {payment_types: [card_repayment], direction: out}
+    trigger: {type: aggregate, window_days: 90, min_distinct_counterparties: 10}

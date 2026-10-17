@@ -1,0 +1,15 @@
+{
+  "provider": "groq",
+  "model": "openai/gpt-oss-120b",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are writing the executive summary of an independent audit of a\nbank's anti-money-laundering transaction monitoring, for its board, in UK English.\nWrite one paragraph of at most 120 words: the overall conclusion, the most serious\ngaps, and the next step. Use ONLY the numbers in the facts. Do not calculate new\nnumbers. Do not name customers. Return JSON: {\"summary\": \"<text>\"}"
+    },
+    {
+      "role": "user",
+      "content": "{\"rulebook\": \"Northbridge Bank 2026-10-remediated\", \"customers_monitored\": 50500, \"cases_opened\": 2815, \"customers_suppressed\": 0, \"pct_money_watched_by_amount_or_country_rule\": 58.0, \"unmonitored_payment_types\": [], \"unmonitored_money_gbp\": 0, \"findings_total\": 4, \"findings_high\": 2, \"review_queue_customers\": 100, \"findings\": [{\"id\": \"CA1\", \"check\": \"calibration\", \"severity\": \"high\", \"title\": \"Strong red flag worth only 7 points: R07_split_money_orders\", \"metric\": \"7 pts, right 100.0% of the time (87-100%, n=25)\"}, {\"id\": \"BL1\", \"check\": \"below_line\", \"severity\": \"high\", \"title\": \"50 customers with no case look highly unusual\", \"metric\": \"top 50 of 47,685 unflagged customers\"}, {\"id\": \"CV1\", \"check\": \"coverage\", \"severity\": \"medium\", \"title\": \"Credit card payments (out) are only checked by a transaction count\", \"metric\": \"only R06_velocity: \u00a33,095,313,643\"}, {\"id\": \"CV2\", \"check\": \"coverage\", \"severity\": \"medium\", \"title\": \"Debit card payments (out) are only checked by a transaction count\", \"metric\": \"only R06_velocity: \u00a33,085,585,977\"}]}"
+    }
+  ],
+  "reply": "{\"summary\":\"The audit finds that Northbridge Bank monitors 50,500 customers and opened 2,815 cases, with 0 customers suppressed and 58.0% of money watched by amount or country rule, indicating a functional baseline. However, two high\u2011severity gaps dominate: a strong red\u2011flag rule worth only 7 points (CA1) and 50 customers with no case flagged as highly unusual (BL1). Additionally, credit and debit card outflows are covered only by a transaction\u2011count rule, leaving \u00a33,095,313,643 and \u00a33,085,585,977 respectively un\u2011analysed by risk metrics. The next step is to remediate the two high\u2011severity findings, extend coverage beyond count\u2011based rules for card payments, and clear the 100\u2011customer review queue.\"}"
+}

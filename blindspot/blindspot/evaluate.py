@@ -1,11 +1,11 @@
-"""How much did the replica catch? Uses the ground truth, so it lives
+"""How much did the bank's rules catch? Uses the ground truth, so it lives
 outside the engine.
 
     python -m blindspot.evaluate
     python -m blindspot.evaluate --data data/sample
 
 Prints the headline number for planted and SAML-D laundering, then a
-per-typology table. Use it while tuning engine.CONFIG.
+per-typology table. Use it when trying a different rulebook.
 """
 
 from __future__ import annotations

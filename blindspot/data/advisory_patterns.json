@@ -2,7 +2,7 @@
   "advisory": "advisories/third_party_card_repayments.md",
   "patterns": [
     {
-      "assumptions": "Assume at least ten distinct cardholders over a 90\u2011day window; each repayment between \u00a3250\u2011\u00a32,500",
+      "assumptions": "Three\u2011month window interpreted as 90 days; ten distinct cardholders required; amount range taken from advisory",
       "direction": "out",
       "payment_types": [
         "card_repayment"
@@ -17,12 +17,12 @@
       "min_total": 0,
       "max_total": 1000000000000000.0,
       "min_windows": 1,
-      "id": "business_card_repayment_mules",
-      "name": "Business credit\u2011card repayments to many individuals",
+      "id": "business_credit_card_mule_repayments",
+      "name": "Multiple credit card repayments to many individuals",
       "red_flag_quote": "repayments to the credit cards of many different individuals, typically ten or more"
     },
     {
-      "assumptions": "Assume at least two money orders per day, combined total <\u00a32,500, repeated on at least two separate days",
+      "assumptions": "\u2018Several\u2019 taken as at least 2 money orders; combined total must be <\u00a32,500; repeated on at least 2 separate days",
       "direction": "in",
       "payment_types": [
         "money_order"
@@ -37,15 +37,15 @@
       "min_total": 0,
       "max_total": 2500,
       "min_windows": 2,
-      "id": "business_money_order_split",
-      "name": "Multiple small money orders paid in same day",
+      "id": "business_money_order_split_deposits",
+      "name": "Multiple money orders deposited same day below \u00a32,500",
       "red_flag_quote": "several money orders on the same day whose combined value is just below \u00a32,500"
     }
   ],
   "untestable": [
     {
-      "red_flag": "Credit card repayments follow shortly after cash or money order deposits into the same account",
-      "reason": "Requires detecting ordered sequence of different transaction types, which cannot be expressed with current pattern fields"
+      "red_flag": "Credit card repayments follow shortly after cash or money order deposits into the same account.",
+      "reason": "Requires detection of temporal ordering between different transaction types, not expressible in a single pattern."
     }
   ],
   "warnings": []

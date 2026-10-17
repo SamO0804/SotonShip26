@@ -2,5 +2,8 @@ pandas>=2.0
 pyarrow>=14
 numpy
 scikit-learn
-streamlit
-plotly
+streamlit>=1.50
+plotly>=5.20
+pyyaml>=6
+openai
+python-dotenv

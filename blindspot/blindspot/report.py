@@ -26,8 +26,9 @@ from pathlib import Path
 import pandas as pd
 
 from . import llm, schema
+from . import rulebook as rbk
 
-CHECK_ORDER = {"coverage": 0, "below_line": 1, "calibration": 2, "advisory": 3}
+CHECK_ORDER = {c: i for i, c in enumerate(schema.CHECKS)}
 SEV_ORDER = {"high": 0, "medium": 1, "low": 2}
 BELOW_LINE_TOP = 100      # how far down the ML ranking the queue reaches
 
@@ -70,34 +71,47 @@ def review_queue(d: Path) -> pd.DataFrame:
         add(r["customer_id"], f"ML: #{r['rank']} most unusual unflagged customer "
                               f"({r['reasons']})", 3 if r["rank"] <= 25 else 2)
 
-    # Suppressed valued clients: scored enough for a case, never got one.
-    for c, r in cases[cases["suppressed"]].iterrows():
+    # Suppressed valued clients who scored enough for a case: the exemption blocked it.
+    rb_used = rbk.used(d)
+    case_at = rb_used["case_threshold"] if rb_used else schema.CASE_THRESHOLD
+    for c, r in cases[cases["suppressed"] & (cases["score"] >= case_at)].iterrows():
         add(c, f"scored {r['score']} points but exempted as a valued client", 3)
 
-    # Calibration: customers hit by an under-weighted rule.
+    # Calibration: customers who WOULD have had a case if the under-weighted rules
+    # carried their suggested points. (Not everyone those rules fired on: a 1-point
+    # rule can fire on thousands of ordinary customers.)
     cal_path = d / "calibration.parquet"
     if cal_path.exists():
         cal = pd.read_parquet(cal_path)
         under = cal[cal["verdict"] == "under-weighted"]
         if len(under):
+            rb = rbk.used(d)
+            threshold = rb["case_threshold"] if rb else schema.CASE_THRESHOLD
+            window = rb["window_days"] if rb else schema.WINDOW_DAYS
+            new_pts = dict(zip(under["rule_id"], under["suggested_points"].astype(int)))
             alerts = pd.read_parquet(d / "alerts.parquet")
-            for _, r in under.iterrows():
-                hit = alerts.loc[alerts["rule_id"] == r["rule_id"], "customer_id"].unique()
-                for c in hit:
-                    add(c, f"triggered {r['rule_id']}: worth {r['points']} pt but right "
-                           f"{100 * r['hit_rate']:.0f}% of the time", 2)
+            a = alerts[alerts["customer_id"].isin(no_case)]
+            a = a.assign(points=a["rule_id"].map(new_pts).fillna(a["points"]))
+            a = a.sort_values("timestamp").set_index("timestamp")
+            rescored = (a.groupby("customer_id")["points"].rolling(f"{window}D").sum()
+                        .groupby(level=0).max())
+            fired = alerts[alerts["rule_id"].isin(new_pts)].groupby("customer_id")["rule_id"] \
+                .agg(lambda s: sorted(set(s)))
+            for c, rules_hit in fired.items():
+                if rescored.get(c, 0) >= threshold:
+                    change = ", ".join(f"{rid} at {new_pts[rid]} pts" for rid in rules_hit)
+                    add(c, f"would reach {rescored[c]:.0f} points, enough for a case, "
+                           f"with {change}", 2)
 
     q = pd.DataFrame({"customer_id": list(reasons),
                       "priority": [priority[c] for c in reasons],
                       "checks": [len(reasons[c]) for c in reasons],
                       "reasons": [" | ".join(reasons[c]) for c in reasons]})
-    if q.empty:
-        return q
     q = q.merge(below[["customer_id", "anomaly_score"]], on="customer_id", how="left")
     q["engine_score"] = q["customer_id"].map(cases["score"])
     q["suppressed"] = q["customer_id"].map(cases["suppressed"])
     q = q.sort_values(["priority", "anomaly_score"], ascending=False).reset_index(drop=True)
-    q.insert(0, "queue_rank", range(1, len(q) + 1))
+    q.insert(0, "queue_rank", pd.Series(range(1, len(q) + 1), dtype="int64"))
     return q
 
 
@@ -107,7 +121,9 @@ def facts(d: Path, findings: pd.DataFrame, queue: pd.DataFrame) -> dict:
     cov = pd.read_parquet(d / "coverage.parquet")
     total = cov["money_gbp"].sum()
     unmon = cov[cov["status"] == "unmonitored"]
+    rb = rbk.used(d)
     return {
+        "rulebook": f"{rb['bank']} {rb['version']}" if rb else "unknown",
         "customers_monitored": int(len(cases)),
         "cases_opened": int(cases["case_opened"].sum()),
         "customers_suppressed": int(cases["suppressed"].sum()),
@@ -185,7 +201,7 @@ def executive_summary(f: dict) -> tuple[str, str]:
     fallback = (f"Blindspot reviewed monitoring for {f['customers_monitored']:,} customers and "
                 f"raised {f['findings_total']} findings, {f['findings_high']} of them high "
                 f"severity. Only {f['pct_money_watched_by_amount_or_country_rule']}% of money is "
-                f"watched by an amount or country rule. {f['review_queue_customers']:,} customers "
+                f"watched by a rule that checks amounts, countries or patterns. {f['review_queue_customers']:,} customers "
                 f"with no case are recommended for review.")
     try:
         text = llm.chat_json([{"role": "system", "content": SUMMARY_SYSTEM},
@@ -240,6 +256,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", type=Path, default=Path("data"))
     ap.add_argument("--no-llm", action="store_true", help="skip LLM writing")
+    ap.add_argument("--no-proof", action="store_true",
+                    help="skip the check against planted answers (automatic if there are none)")
     args = ap.parse_args()
     d = args.data
 
@@ -258,9 +276,13 @@ def main() -> None:
 
     findings.to_parquet(d / "findings.parquet", index=False)
     queue.to_parquet(d / "review_queue.parquet", index=False)
-    val = validation(d, queue)
+    # A real bank has no answer key: then there is simply no validation section.
+    val = None if args.no_proof or not (d / "labels.parquet").exists() else validation(d, queue)
     (d / "summary.json").write_text(json.dumps(
-        {"facts": f, "executive_summary": summary, "summary_written_by": by,
+        {"dataset": "SAML-D (Bournemouth University) with Bank of America patterns planted; synthetic",
+         "generated_at": pd.Timestamp.now(tz="Europe/London").strftime("%d %b %Y, %H:%M"),
+         "is_sample": False,
+         "facts": f, "executive_summary": summary, "summary_written_by": by,
          "validation_uses_planted_answers": val}, indent=2, default=str))
 
     print("EXECUTIVE SUMMARY" + (" (LLM)" if by == "llm" else " (code)"))
@@ -273,6 +295,9 @@ def main() -> None:
     print(f"\nreview queue: {len(queue):,} customers with no case")
     print(queue.head(5)[["queue_rank", "customer_id", "priority", "reasons"]].to_string(index=False))
 
+    if not val:
+        print("\nno answer key: validation skipped (as it would be at a real bank)")
+        return
     print("\nPROOF (planted answers): of the laundering the bank missed, how much does Blindspot find?")
     for src in ("planted", "samld"):
         v = val.get(src)

@@ -32,12 +32,12 @@ PROVIDERS = {
     "groq": {
         "base_url": "https://api.groq.com/openai/v1",
         "key": "GROQ_API_KEY",
-        "model": "llama-3.3-70b-versatile",
+        "model": "openai/gpt-oss-120b",
     },
     "openrouter": {
         "base_url": "https://openrouter.ai/api/v1",
         "key": "OPENROUTER_API_KEY",
-        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "model": "openai/gpt-oss-120b:free",
     },
 }
 CACHE = Path("llm_cache")
@@ -72,8 +72,19 @@ def chat(messages: list[dict], json_mode: bool = False, temperature: float = 0.0
     from openai import OpenAI  # imported here so the rest of Blindspot works without it
     client = OpenAI(base_url=p["base_url"], api_key=api_key)
     kwargs = {"response_format": {"type": "json_object"}} if json_mode else {}
-    resp = client.chat.completions.create(model=model, messages=messages,
-                                          temperature=temperature, **kwargs)
+    try:
+        resp = client.chat.completions.create(model=model, messages=messages,
+                                              temperature=temperature, **kwargs)
+    except Exception as e:
+        if "model_not_found" in str(e) or "does not exist" in str(e):
+            try:
+                ids = sorted(m.id for m in client.models.list().data)
+            except Exception:
+                ids = ["(could not list models)"]
+            raise RuntimeError(
+                f"Model {model!r} isn't available to your {name} key. Set LLM_MODEL in .env "
+                f"to one of these:\n  " + "\n  ".join(ids)) from None
+        raise
     reply = resp.choices[0].message.content or ""
     path.write_text(json.dumps({"provider": name, "model": model, "messages": messages,
                                 "reply": reply}, indent=2))

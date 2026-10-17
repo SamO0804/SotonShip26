@@ -1,0 +1,77 @@
+# Northbridge Bank: transaction monitoring rulebook, REMEDIATED
+#
+# FICTIONAL. The same bank after acting on Blindspot's findings. Load this
+# after northbridge_bank.yaml to show the audit responding to fixes.
+#
+# Changes from northbridge_bank.yaml:
+#   - valued-client suppression switched off
+#   - R02 (repeated near-limit cash) raised from 1 to 5 points
+#   - R01 and R04 lowered, as calibration showed they are rarely right
+#   - NEW R07: money orders split under the £2,500 ID limit
+#   - NEW R08: one business repaying many people's credit cards
+# Not fixed: slow, thin activity (no rule here targets it).
+
+bank: Northbridge Bank
+version: "2026-10-remediated"
+
+case_threshold: 20
+window_days: 396
+
+high_risk_countries: [Belarus, Georgia, UAE, Turkey, Morocco, Mexico]
+
+suppression:
+  valued_clients_top_n: 0        # nobody is exempt any more
+
+rules:
+  - id: R01_large_cash
+    description: Cash deposit of £10,000 or more
+    points: 2                    # was 10
+    applies_to: {payment_types: [cash_deposit], direction: in}
+    trigger: {type: single, amount_min: 10000}
+
+  - id: R02_cash_near_limit
+    description: 3 or more cash deposits of £9,000-£9,999 within 30 days
+    points: 5                    # was 1
+    applies_to: {payment_types: [cash_deposit], direction: in}
+    trigger: {type: repeated, amount_min: 9000, amount_max: 9999.99,
+              window_days: 30, min_count: 3}
+
+  - id: R03_high_risk_country
+    description: Wire or cross-border payment to or from a high-risk country
+    points: 1
+    applies_to: {payment_types: [wire, cross_border], direction: any}
+    trigger: {type: single, countries: high_risk}
+
+  - id: R04_large_wire
+    description: Wire or cross-border payment of £50,000 or more
+    points: 2                    # was 5
+    applies_to: {payment_types: [wire, cross_border], direction: any}
+    trigger: {type: single, amount_min: 50000}
+
+  - id: R05_large_payment
+    description: Cheque, ACH payment or cash withdrawal of £25,000 or more
+    points: 2
+    applies_to: {payment_types: [cheque, ach, cash_withdrawal], direction: out}
+    trigger: {type: single, amount_min: 25000}
+
+  - id: R06_velocity
+    description: 15 or more outgoing payments in a 30-day period
+    points: 3
+    applies_to:
+      direction: out
+      payment_types: [cash_deposit, cash_withdrawal, cheque, ach, credit_card,
+                      card_repayment, debit_card, cross_border, wire]
+    trigger: {type: velocity, window_days: 30, min_count: 15}
+
+  - id: R07_split_money_orders
+    description: 2 or more money orders paid in on one day, totalling £2,000-£2,499
+    points: 7                    # three such days open a case
+    applies_to: {payment_types: [money_order], direction: in}
+    trigger: {type: aggregate, window_days: 1, min_count: 2,
+              min_total: 2000, max_total: 2499.99}
+
+  - id: R08_card_repayment_funnel
+    description: Repaying the credit cards of 10 or more different people within 90 days
+    points: 20                   # opens a case on its own
+    applies_to: {payment_types: [card_repayment], direction: out}
+    trigger: {type: aggregate, window_days: 90, min_distinct_counterparties: 10}

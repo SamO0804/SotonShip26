@@ -1,4 +1,19 @@
-data/*.parquet
-__pycache__/
-SAML-D.csv
+# secrets
 .env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# data: SAML-D is ~1GB and every output is rebuilt by the pipeline
+data/
+
+# the dashboard's working copy of an edited rulebook
+rulebooks/active.yaml
+
+# macOS
+.DS_Store
+
+# llm_cache/ is deliberately NOT ignored: commit it so the demo runs offline
+# with identical LLM output. It holds only advisory text and findings, no secrets.

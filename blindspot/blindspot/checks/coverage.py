@@ -11,7 +11,7 @@ fire on it. Three levels:
   - unmonitored     no rule can ever fire          (Bank of America: money orders)
   - count-only      only a velocity rule, which never looks at amount,
                     country or counterparty
-  - monitored       at least one amount or country rule
+  - monitored       at least one amount, country or pattern rule
 
 Reads transactions, rules and alerts. Never reads labels.
 Writes data/coverage.parquet and data/findings_coverage.parquet.
@@ -83,13 +83,13 @@ def findings(cov: pd.DataFrame, tx: pd.DataFrame) -> pd.DataFrame:
                        f"only {', '.join(r['rules'])}: £{r['money_gbp']:,.0f}"),
             "evidence_ids": list(top.index[:100]),
             "suggested_fix": (f"Add scenarios for {r['label'].lower()}, including amount, "
-                              f"frequency and split-deposit patterns." if unmon else
+                              "frequency and split-deposit patterns." if unmon else
                               f"Add amount and counterparty rules for {r['label'].lower()}."),
             "explanation": (f"No rule can fire on {r['label'].lower()}, so £{r['money_gbp']:,.0f} "
                             f"from {r['customers']:,} customers was never checked."
                             if unmon else
-                            f"The only rule that can fire counts payments; it never looks at "
-                            f"amounts, countries or who is being paid."),
+                            "The only rule that can fire counts payments; it never looks at "
+                            "amounts, countries or who is being paid."),
         })
     cols = list(schema.FINDINGS)
     return schema.conform(pd.DataFrame(rows, columns=cols), schema.FINDINGS, "findings")
@@ -113,7 +113,7 @@ def main() -> None:
     show["money_gbp"] = show["money_gbp"].map("£{:,.0f}".format)
     print(show.to_string(index=False))
     mon = cov.loc[cov["status"] == "monitored", "money_gbp"].sum() / cov["money_gbp"].sum()
-    print(f"\n{100 * mon:.1f}% of money is watched by an amount or country rule")
+    print(f"\n{100 * mon:.1f}% of money is watched by a rule that checks amounts, countries or patterns")
     print(f"{len(fnd)} findings: " + "; ".join(fnd["title"]))
 
 

@@ -1,0 +1,64 @@
+# Northbridge Bank: transaction monitoring rulebook
+#
+# FICTIONAL. Written for the Blindspot demo and modelled on the monitoring
+# failures in the October 2026 Bank of America enforcement action. This is
+# the file a bank would hand Blindspot to audit.
+#
+# Format: see blindspot/rulebook.py. Payment types the rules can name:
+#   cash_deposit, cash_withdrawal, cheque, money_order, ach, credit_card,
+#   card_repayment, debit_card, cross_border, wire   (or "all")
+
+bank: Northbridge Bank
+version: "2026-10"
+
+case_threshold: 20        # points needed to open a case for investigation
+window_days: 396          # points older than 13 months expire
+
+high_risk_countries: [Belarus, Georgia, UAE, Turkey, Morocco, Mexico]
+
+suppression:
+  # The bank's biggest small-business clients by money received are on a
+  # "valued client" list and are never escalated, whatever they score.
+  valued_clients_top_n: 5
+
+rules:
+  - id: R01_large_cash
+    description: Cash deposit of £10,000 or more
+    points: 10
+    applies_to: {payment_types: [cash_deposit], direction: in}
+    trigger: {type: single, amount_min: 10000}
+
+  - id: R02_cash_near_limit
+    description: 3 or more cash deposits of £9,000-£9,999 within 30 days
+    points: 1
+    applies_to: {payment_types: [cash_deposit], direction: in}
+    trigger: {type: repeated, amount_min: 9000, amount_max: 9999.99,
+              window_days: 30, min_count: 3}
+
+  - id: R03_high_risk_country
+    description: Wire or cross-border payment to or from a high-risk country
+    points: 1
+    applies_to: {payment_types: [wire, cross_border], direction: any}
+    trigger: {type: single, countries: high_risk}
+
+  - id: R04_large_wire
+    description: Wire or cross-border payment of £50,000 or more
+    points: 5
+    applies_to: {payment_types: [wire, cross_border], direction: any}
+    trigger: {type: single, amount_min: 50000}
+
+  - id: R05_large_payment
+    description: Cheque, ACH payment or cash withdrawal of £25,000 or more
+    points: 2
+    applies_to: {payment_types: [cheque, ach, cash_withdrawal], direction: out}
+    trigger: {type: single, amount_min: 25000}
+
+  - id: R06_velocity
+    description: 15 or more outgoing payments in a 30-day period
+    points: 3
+    applies_to:
+      direction: out
+      # every type except money_order, which the bank's system can't read
+      payment_types: [cash_deposit, cash_withdrawal, cheque, ach, credit_card,
+                      card_repayment, debit_card, cross_border, wire]
+    trigger: {type: velocity, window_days: 30, min_count: 15}

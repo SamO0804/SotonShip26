@@ -1,0 +1,46 @@
+# Meridian Pay: transaction monitoring rulebook
+#
+# FICTIONAL test rulebook. A fast-growing UK payments fintech whose monitoring
+# was built for one product (sending money out) and never extended as it grew.
+# Its predicted weaknesses are written down in rulebooks/PREDICTIONS.md BEFORE
+# it was ever run through Blindspot.
+
+bank: Meridian Pay
+version: "2026-01"
+
+case_threshold: 40          # set high to keep the small compliance team's queue short
+window_days: 396
+
+high_risk_countries: [Belarus, Georgia, UAE, Turkey, Morocco, Mexico]
+
+suppression:
+  # "Strategic partners": the 25 biggest small-business accounts by money received
+  valued_clients_top_n: 25
+
+rules:
+  - id: M01_outbound_high_risk
+    description: Outgoing wire or cross-border payment to a high-risk country
+    points: 5
+    applies_to: {payment_types: [wire, cross_border], direction: out}
+    trigger: {type: single, countries: high_risk}
+
+  - id: M02_large_outbound
+    description: Outgoing payment of £20,000 or more
+    points: 5
+    applies_to: {payment_types: [cheque, ach, cash_withdrawal, cross_border, wire], direction: out}
+    trigger: {type: single, amount_min: 20000}
+
+  - id: M03_outbound_velocity
+    description: 25 or more outgoing payments in a 30-day period
+    points: 10
+    applies_to:
+      direction: out
+      payment_types: [cash_withdrawal, cheque, ach, credit_card, card_repayment,
+                      debit_card, cross_border, wire]
+    trigger: {type: velocity, window_days: 30, min_count: 25}
+
+  - id: M04_large_card_spend
+    description: Card purchase of £5,000 or more
+    points: 3
+    applies_to: {payment_types: [credit_card, debit_card], direction: out}
+    trigger: {type: single, amount_min: 5000}

@@ -1,12 +1,12 @@
 """Blindspot data contract.
 
-Every module reads and writes these four tables. Agree changes as a team
+Every module reads and writes these tables. Agree changes as a team
 before editing this file: the data, engine and dashboard all depend on it.
 
     transactions   -> canonical transaction table (SAML-D + planted rows)
-    labels         -> ground truth. ONLY Blindspot scoring and the dashboard
-                      may read this. The replica rule engine must never see it.
-    engine_output  -> what the flawed bank system did (alerts + cases)
+    labels         -> ground truth. Only evaluate, investigate and the PROOF
+                      sections may read it. The engine and the checks never do.
+    alerts, cases  -> what the bank's rules did (written by engine.py)
     findings       -> what Blindspot reports; the only thing Streamlit renders
 """
 
@@ -37,7 +37,7 @@ SEGMENTS = ["individual", "small_business", "unknown"]
 
 LABEL_SOURCES = ["samld", "planted"]
 
-CHECKS = ["coverage", "below_line", "calibration", "advisory"]
+CHECKS = ["coverage", "calibration", "advisory", "below_line"]   # dashboard order
 
 SEVERITIES = ["high", "medium", "low"]
 
@@ -66,7 +66,7 @@ LABELS = {
     "typology": "string",          # e.g. "structured_money_orders"; "normal" if clean
 }
 
-# One row per (customer, rule firing). Written by the replica engine.
+# One row per (customer, rule firing). Written by the engine.
 ALERTS = {
     "customer_id": "string",
     "rule_id": "string",
@@ -79,7 +79,7 @@ ALERTS = {
 CASES = {
     "customer_id": "string",
     "score": "int64",              # points inside the rolling 13-month window
-    "case_opened": "bool",         # True when score reached CASE_THRESHOLD
+    "case_opened": "bool",         # True when score reached the rulebook's case_threshold
     "suppressed": "bool",          # True if on the suppression list
 }
 
@@ -95,7 +95,9 @@ FINDINGS = {
 }
 
 # ---------------------------------------------------------------------------
-# Shared constants for the replica and the headline number
+# Shared constants. The bank's own threshold, window and high-risk list live
+# in its rulebook (rulebooks/*.yaml); these are defaults and Blindspot's own
+# reference values for planting and the ML features.
 # ---------------------------------------------------------------------------
 
 CASE_THRESHOLD = 20       # points needed to open a case
@@ -108,7 +110,7 @@ SEED = 42                 # fix everywhere for a reproducible demo
 MONEY_ORDER_ID_LIMIT = 2_500   # ID check on money/postal order deposits (BoA: $3,000)
 CASH_REVIEW_LIMIT = 10_000     # cash deposit review limit (BoA: $10,000 CTR)
 
-# Countries the replica and planting treat as high risk.
+# Blindspot's reference list of high-risk countries (planting and ML features).
 HIGH_RISK_COUNTRIES = ["Belarus", "Georgia", "UAE", "Turkey", "Morocco", "Mexico"]
 
 # Headline definition (agree as a team; do not change mid-build):

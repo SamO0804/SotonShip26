@@ -1,4 +1,4 @@
-"""Blindspot check 2: the below-the-line audit (machine learning).
+"""Blindspot check 4: the below-the-line audit (machine learning).
 
     python -m blindspot.checks.below_line
     python -m blindspot.checks.below_line --data data/sample
@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest
 
+from .. import rulebook as rbk
 from .. import schema
 
 # Feature -> plain-English name used in reasons.
@@ -57,8 +58,34 @@ LOG = ["n_txn", "total_in", "total_out", "max_amount", "near_limit_cash", "money
        "max_deposits_one_day", "high_risk_txns", "intl_in", "unique_payees", "card_payees",
        "max_out_30d"]
 
-BANDS = [(-1, 0, "0"), (1, 9, "1-9"), (10, 15, "10-15"), (16, 19, "16-19"),
-         (20, 24, "20-24"), (25, 10**9, "25+")]
+def make_bands(threshold: int) -> list[tuple[int, int, str]]:
+    """Engine-score bands relative to the bank's case threshold. "Just under" is
+    80-99% of it, "just over" 100-120%. With a 20-point threshold:
+    0 | 1-9 | 10-15 | 16-19 | 20-24 | 25+."""
+    t = int(threshold)
+    under = max(1, -(-4 * t // 5))          # ceil(0.8 t)
+    over = max(t, 6 * t // 5)               # floor(1.2 t)
+    half = max(1, t // 2)
+    edges = [(-1, 0), (1, half - 1), (half, under - 1), (under, t - 1), (t, over), (over + 1, 10**9)]
+    return [(lo, hi, _label(lo, hi)) for lo, hi in edges if lo <= hi]
+
+
+def _label(lo: int, hi: int) -> str:
+    if lo < 0:
+        return "0"
+    if hi >= 10**9:
+        return f"{lo}+"
+    return str(lo) if lo == hi else f"{lo}-{hi}"
+
+
+def threshold_bands(threshold: int) -> tuple[str, str] | None:
+    """Names of the 'just under' and 'just over' bands, or None if the threshold
+    is too small to have a 'just under' band."""
+    t = int(threshold)
+    under, over = max(1, -(-4 * t // 5)), max(t, 6 * t // 5)
+    if under > t - 1:
+        return None
+    return _label(under, t - 1), _label(t, over)
 
 
 def customer_features(tx: pd.DataFrame) -> pd.DataFrame:
@@ -92,7 +119,7 @@ def customer_features(tx: pd.DataFrame) -> pd.DataFrame:
     out = t[d == "out"]
     f["unique_payees"] = out.groupby("customer_id")["receiver_id"].nunique()
     f["payees_per_payment"] = f["unique_payees"] / out.groupby("customer_id").size()
-    f["card_payees"] = t[(d == "out") & (pt == "credit_card")].groupby("customer_id")["receiver_id"].nunique()
+    f["card_payees"] = t[(d == "out") & (pt == "card_repayment")].groupby("customer_id")["receiver_id"].nunique()
 
     ins = t[d == "in"]
     f["max_deposits_one_day"] = (ins.groupby(["customer_id", ins["timestamp"].dt.floor("D")])
@@ -137,7 +164,8 @@ def reasons(f: pd.DataFrame, ids, top: int = 3) -> dict[str, str]:
     return out
 
 
-def run(tx: pd.DataFrame, cases: pd.DataFrame, top_n: int = 50) -> tuple[pd.DataFrame, pd.DataFrame]:
+def run(tx: pd.DataFrame, cases: pd.DataFrame, top_n: int = 50,
+        threshold: int = schema.CASE_THRESHOLD) -> tuple[pd.DataFrame, pd.DataFrame]:
     f = customer_features(tx)
     score = fit_scores(f)
 
@@ -152,7 +180,7 @@ def run(tx: pd.DataFrame, cases: pd.DataFrame, top_n: int = 50) -> tuple[pd.Data
     # Band comparison: share of each engine-score band in the top 2% most unusual.
     cut = res["anomaly_score"].quantile(0.98)
     band_rows = []
-    for lo, hi, name in BANDS:
+    for lo, hi, name in make_bands(threshold):
         b = res[(res["engine_score"] >= lo) & (res["engine_score"] <= hi)]
         band_rows.append({"band": name, "customers": len(b),
                           "pct_highly_unusual": round(100 * (b["anomaly_score"] >= cut).mean(), 1)
@@ -171,16 +199,21 @@ def run(tx: pd.DataFrame, cases: pd.DataFrame, top_n: int = 50) -> tuple[pd.Data
                        + " | ".join(f"{c}: {why[c]}" for c in list(top["customer_id"])[:3]),
     })
     b = bands.set_index("band")["pct_highly_unusual"]
-    if b.get("16-19", 0) > b.get("20-24", 0):
+    names = threshold_bands(threshold)
+    under_name, over_name = names or ("", "")
+    if names and under_name in b and over_name in b and b[under_name] > b[over_name]:
+        under_lo = int(under_name.split("-")[0])
         findings.append({
             "finding_id": "BL2", "check": "below_line", "severity": "high",
             "title": "Customers just under the threshold look riskier than those just over it",
-            "metric": f"scores 16-19: {b['16-19']}% highly unusual vs 20-24: {b['20-24']}%",
-            "evidence_ids": list(below.loc[below["engine_score"].between(16, 19), "customer_id"]
-                                 .head(100)),
-            "suggested_fix": "Lower the case threshold or sample scores 16-19 for review every month.",
-            "explanation": "The threshold of 20 points cuts off customers who look more suspicious "
-                           "than many it lets through.",
+            "metric": (f"scores {under_name}: {b[under_name]}% highly unusual vs "
+                       f"{over_name}: {b[over_name]}%"),
+            "evidence_ids": list(below.loc[below["engine_score"].between(under_lo, threshold - 1),
+                                           "customer_id"].head(100)),
+            "suggested_fix": (f"Lower the case threshold or sample scores {under_name} for review "
+                              f"every month."),
+            "explanation": (f"The threshold of {threshold} points cuts off customers who look more "
+                            f"suspicious than many it lets through."),
         })
     sup = below[below["suppressed"]].sort_values("anomaly_score", ascending=False)
     hot = sup[sup["anomaly_score"] >= cut]
@@ -191,8 +224,10 @@ def run(tx: pd.DataFrame, cases: pd.DataFrame, top_n: int = 50) -> tuple[pd.Data
             "metric": f"{len(hot)} of {len(sup)} suppressed customers in the top 2% most unusual",
             "evidence_ids": list(hot["customer_id"]),
             "suggested_fix": "Remove automatic suppression; review valued clients like anyone else.",
-            "explanation": "These customers scored enough for a case but were exempted as valued "
-                           "clients, and their behaviour is among the most unusual in the bank.",
+            "explanation": (f"These customers are on the valued-client list, so they can never get "
+                            f"a case whatever they score, and their behaviour is among the most "
+                            f"unusual in the bank. {(hot['engine_score'] >= threshold).sum()} of "
+                            f"them have already scored enough for a case."),
         })
     fdf = schema.conform(pd.DataFrame(findings), schema.FINDINGS, "findings")
     cols = ["rank", "customer_id", "anomaly_score", "engine_score", "suppressed", "reasons"]
@@ -229,13 +264,15 @@ def main() -> None:
 
     tx = pd.read_parquet(args.data / "transactions.parquet")
     cases = pd.read_parquet(args.data / "cases.parquet")
-    below, findings, bands = run(tx, cases, args.top)
+    rb = rbk.used(args.data)   # the bank's own case threshold
+    below, findings, bands = run(tx, cases, args.top,
+                                 rb["case_threshold"] if rb else schema.CASE_THRESHOLD)
     below.to_parquet(args.data / "below_line.parquet", index=False)
     findings.to_parquet(args.data / "findings_below_line.parquet", index=False)
 
     print("engine score band vs share in the top 2% most unusual customers:")
     print(bands.to_string(index=False))
-    print(f"\ntop 5 unflagged customers:")
+    print("\ntop 5 unflagged customers:")
     for _, r in below.head(5).iterrows():
         print(f"  #{r['rank']} {r['customer_id']} (engine {r['engine_score']} pts): {r['reasons']}")
     print(f"\n{len(findings)} findings: " + "; ".join(findings["title"]))

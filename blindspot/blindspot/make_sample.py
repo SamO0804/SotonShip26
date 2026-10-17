@@ -1,11 +1,14 @@
-"""Build a small fake dataset in data/sample/ so everyone can build before
-the real data is ready.
+"""Build a small fake bank in data/sample/ for testing without the SAML-D download.
 
     python -m blindspot.make_sample
+    python -m blindspot.run_all --data data/sample
 
-Makes a SAML-D-shaped CSV, runs it through the real normaliser AND the real
-planting step (so both are tested), then adds dummy engine output and
-findings. The engine and findings numbers are made up; the shapes are real.
+Makes a SAML-D-shaped CSV with 2,000 customers and runs it through the real
+normaliser into data/sample/base/. run_all then plants the patterns, runs the
+bank's rulebook and every check, exactly as on the real data.
+
+The fake "SAML-D" laundering here is random noise, so only the planted results
+mean anything. Never present sample results as real.
 """
 
 from __future__ import annotations
@@ -17,24 +20,23 @@ import pandas as pd
 
 from . import schema
 from .normalise import convert
-from .plant import plant
 
 OUT = Path("data/sample")
-rng = np.random.default_rng(schema.SEED)
 
 
-def fake_samld(n_customers: int = 40, n: int = 1500) -> pd.DataFrame:
+def fake_samld(n_customers: int = 2_000, n: int = 100_000, seed: int = schema.SEED) -> pd.DataFrame:
+    rng = np.random.default_rng(seed)
     types = ["Cash Deposit", "Cash Withdrawal", "Cheque", "ACH",
              "Credit card", "Debit card", "Cross-border"]
-    senders = np.array([f"{1000 + i}" for i in range(n_customers)])
+    senders = np.array([f"{100000 + i}" for i in range(n_customers)])
     sender = rng.choice(senders, n)
     ts = pd.Timestamp("2022-10-07") + pd.to_timedelta(rng.integers(0, 330 * 24, n), "h")
-    laund = np.isin(sender, senders[:5]) & (rng.random(n) < 0.3)   # 5 laundering customers
+    laund = np.isin(sender, senders[:4]) & (rng.random(n) < 0.3)   # 4 noise "launderers"
     return pd.DataFrame({
         "Time": ts.strftime("%H:%M:%S"),
         "Date": ts.strftime("%Y-%m-%d"),
         "Sender_account": sender,
-        "Receiver_account": rng.choice([f"{9000 + i}" for i in range(200)], n),
+        "Receiver_account": rng.choice([f"{900000 + i}" for i in range(2_000)], n),
         "Amount": rng.lognormal(6.5, 1.1, n).round(2),
         "Sender_bank_location": "UK",
         "Receiver_bank_location": rng.choice(["UK"] * 8 + ["UAE", "Turkey"], n),
@@ -44,68 +46,16 @@ def fake_samld(n_customers: int = 40, n: int = 1500) -> pd.DataFrame:
     })
 
 
-def fake_engine(tx: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    # Money orders are unmonitored in the replica, so they never alert.
-    watched = tx[tx["payment_type"] != "money_order"].sample(frac=0.08, random_state=schema.SEED)
-    alerts = schema.conform(pd.DataFrame({
-        "customer_id": watched["customer_id"],
-        "rule_id": rng.choice(["R01_large_cash", "R02_high_risk_country", "R03_velocity"],
-                              len(watched)),
-        "points": rng.choice([1, 5, 10], len(watched)),
-        "timestamp": watched["timestamp"],
-        "txn_id": watched["txn_id"],
-    }), schema.ALERTS, "alerts")
-    score = alerts.groupby("customer_id")["points"].sum()
-    cases = pd.DataFrame({"customer_id": tx["customer_id"].unique()})
-    cases["score"] = cases["customer_id"].map(score).fillna(0).astype(int)
-    cases["case_opened"] = cases["score"] >= schema.CASE_THRESHOLD
-    cases["suppressed"] = False
-    return alerts, schema.conform(cases, schema.CASES, "cases")
-
-
-def fake_findings(planted: pd.DataFrame) -> pd.DataFrame:
-    mo = list(planted.loc[planted["typology"] == "structured_money_orders", "customer_id"])
-    rows = [
-        ("F1", "coverage", "Money order deposits are not monitored", "high", "0% monitored", mo,
-         "Add a scenario for money order deposits, including sets just under £2,500.",
-         "No rule can fire on money order deposits, so this money is never checked."),
-        ("F2", "below_line", "Customers just under the threshold look riskier", "high",
-         "Scores 16-19: 2.1x anomaly rate", ["1003", "1007"],
-         "Lower the case threshold or test a sample of scores 16-19 every month.",
-         "Customers scoring 16 to 19 are more unusual than those scoring 20 to 24."),
-        ("F3", "calibration", "Strong red flag worth only 1 point", "medium",
-         "R01: 1 pt, 56.8% precision", ["R01_large_cash"],
-         "Raise R01's weight to match how often it is right.",
-         "This rule is right more than half the time but barely moves the score."),
-        ("F4", "advisory", "Credit-card funnel pattern not covered", "medium",
-         "0 of 4 red flags covered", [],
-         "Add a rule for one business paying many unrelated people's cards.",
-         "The advisory's red flags do not match any current rule."),
-    ]
-    df = pd.DataFrame(rows, columns=list(schema.FINDINGS))
-    return schema.conform(df, schema.FINDINGS, "findings")
-
-
 def main() -> None:
-    OUT.mkdir(parents=True, exist_ok=True)
+    base = OUT / "base"
+    base.mkdir(parents=True, exist_ok=True)
     raw = fake_samld()
     raw.to_csv(OUT / "samld_tiny.csv", index=False)
     tx, lab = convert(raw)
-    tx, lab, man = plant(tx, lab, per_pattern=2)
-    alerts, cases = fake_engine(tx)
-    findings = fake_findings(man)
-
-    tx.to_parquet(OUT / "transactions.parquet", index=False)
-    lab.to_parquet(OUT / "labels.parquet", index=False)
-    man.to_parquet(OUT / "planted_customers.parquet", index=False)
-    alerts.to_parquet(OUT / "alerts.parquet", index=False)
-    cases.to_parquet(OUT / "cases.parquet", index=False)
-    findings.to_parquet(OUT / "findings.parquet", index=False)
-
-    for src in ("samld", "planted"):
-        print(src, schema.headline(lab, tx, cases, source=src))
-    print(f"wrote {len(tx)} transactions, {len(alerts)} alerts, "
-          f"{len(cases)} customers, {len(findings)} findings to {OUT}/")
+    tx.to_parquet(base / "transactions.parquet", index=False)
+    lab.to_parquet(base / "labels.parquet", index=False)
+    print(f"wrote {len(tx):,} transactions for {tx['customer_id'].nunique()} customers to {base}/")
+    print("next: python -m blindspot.run_all --data data/sample")
 
 
 if __name__ == "__main__":
