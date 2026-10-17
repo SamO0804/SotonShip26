@@ -44,8 +44,13 @@ def _slug(s: pd.Series) -> pd.Series:
             .str.replace(r"[^a-z0-9]+", "_", regex=True).str.strip("_"))
 
 
-def pick_customers(csv: Path, n_clean: int, seed: int, chunksize: int) -> set[str]:
-    """First pass: find laundering senders, then sample clean ones."""
+def pick_customers(csv: Path, n_clean: int, seed: int, chunksize: int,
+                   n_dirty: int | None = None) -> set[str]:
+    """First pass: find laundering senders, then sample both groups.
+
+    n_dirty caps how many laundering senders are kept (None = all). Keep the
+    ratio realistic: about 1 laundering customer per 100 clean ones.
+    """
     dirty, everyone = set(), set()
     for chunk in pd.read_csv(csv, usecols=["Sender_account", "Is_laundering"],
                              dtype={"Sender_account": "string"}, chunksize=chunksize):
@@ -54,8 +59,12 @@ def pick_customers(csv: Path, n_clean: int, seed: int, chunksize: int) -> set[st
     clean = sorted(everyone - dirty)
     rng = np.random.default_rng(seed)
     chosen = rng.choice(clean, size=min(n_clean, len(clean)), replace=False)
-    print(f"senders: {len(everyone):,} total, {len(dirty):,} laundering kept, "
-          f"{len(chosen):,} clean sampled")
+    all_dirty = len(dirty)
+    if n_dirty is not None and n_dirty < len(dirty):
+        dirty = set(rng.choice(sorted(dirty), size=n_dirty, replace=False))
+    print(f"senders: {len(everyone):,} total ({all_dirty:,} laundering); kept "
+          f"{len(dirty):,} laundering + {len(chosen):,} clean "
+          f"({100 * len(dirty) / (len(dirty) + len(chosen)):.1f}% laundering)")
     return dirty | set(chosen)
 
 
@@ -96,8 +105,9 @@ def convert(raw: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def load_samld(csv: Path, n_clean: int = 20000, seed: int = schema.SEED,
-               chunksize: int = 1_000_000) -> tuple[pd.DataFrame, pd.DataFrame]:
-    keep = pick_customers(csv, n_clean, seed, chunksize)
+               chunksize: int = 1_000_000,
+               n_dirty: int | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    keep = pick_customers(csv, n_clean, seed, chunksize, n_dirty)
     parts, offset = [], 0
     for chunk in pd.read_csv(csv, usecols=SAMLD_COLS,
                              dtype={"Sender_account": "string", "Receiver_account": "string"},
@@ -117,9 +127,11 @@ def main() -> None:
     ap.add_argument("csv", type=Path)
     ap.add_argument("--customers", type=int, default=20000,
                     help="number of clean sender accounts to sample")
+    ap.add_argument("--laundering", type=int, default=None,
+                    help="number of laundering sender accounts to keep (default: all)")
     ap.add_argument("--out", type=Path, default=Path("data/base"))
     args = ap.parse_args()
-    tx, lab = load_samld(args.csv, args.customers)
+    tx, lab = load_samld(args.csv, args.customers, n_dirty=args.laundering)
     args.out.mkdir(parents=True, exist_ok=True)
     tx.to_parquet(args.out / "transactions.parquet", index=False)
     lab.to_parquet(args.out / "labels.parquet", index=False)
