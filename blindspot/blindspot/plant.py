@@ -36,6 +36,15 @@ PATTERNS = [
 BUSINESS_PATTERNS = {"structured_money_orders", "high_risk_wires", "credit_card_funnel"}
 SMALL_BUSINESS_SHARE = 0.2
 
+# Innocent background activity: (method, share of remaining clean customers, is_business)
+BACKGROUND = [
+    ("bg_money_orders", 0.04, False),
+    ("bg_business_cash", 0.03, True),
+    ("bg_wires", 0.02, True),
+]
+NORMAL = "normal_background"
+SAFE_COUNTRIES = ["Germany", "France", "Netherlands", "Ireland", "Spain", "USA"]
+
 
 class Planter:
     def __init__(self, start: pd.Timestamp, end: pd.Timestamp, rng: np.random.Generator):
@@ -133,6 +142,39 @@ class Planter:
             ts += pd.Timedelta(days=int(self.rng.integers(25, 46)))
         return rows
 
+    # -- innocent background activity ---------------------------------------
+    # Without these, only criminals would use money orders or receive wires,
+    # and any model could "detect" them from the payment type alone.
+
+    def bg_money_orders(self, c: str) -> list[dict]:
+        """Ordinary people occasionally depositing a money order."""
+        return [self._row(self._time(), c, "in", self._uid("MO_PAYER_"), c,
+                          self.rng.uniform(20, 900), "money_order")
+                for _ in range(int(self.rng.integers(1, 7)))]
+
+    def bg_business_cash(self, c: str) -> list[dict]:
+        """A shop banking its takings: regular cash deposits, sometimes near
+        or over the review limit for honest reasons."""
+        rows, ts = [], self.start + pd.Timedelta(days=int(self.rng.integers(0, 14)))
+        typical = self.rng.uniform(2_000, 8_000)
+        while ts < self.end:
+            amt = max(200.0, self.rng.normal(typical, typical * 0.35))
+            rows.append(self._row(ts, c, "in", c, c, amt, "cash_deposit"))
+            ts += pd.Timedelta(days=int(self.rng.integers(5, 10)))
+        return rows
+
+    def bg_wires(self, c: str) -> list[dict]:
+        """A business receiving normal wires from trading partners."""
+        partners = [(self._uid("FX_"), str(self.rng.choice(SAFE_COUNTRIES)))
+                    for _ in range(int(self.rng.integers(1, 4)))]
+        rows = []
+        for _ in range(int(self.rng.integers(2, 12))):
+            sid, country = partners[int(self.rng.integers(len(partners)))]
+            rows.append(self._row(self._time(), c, "in", sid, c,
+                                  self.rng.uniform(3_000, 80_000), "wire",
+                                  s_country=country, r_country="UK"))
+        return rows
+
 
 def plant(tx: pd.DataFrame, lab: pd.DataFrame, per_pattern: int = 25,
           seed: int = schema.SEED) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -157,6 +199,20 @@ def plant(tx: pd.DataFrame, lab: pd.DataFrame, per_pattern: int = 25,
             manifest.append({"customer_id": str(c), "typology": pattern, "n_txns": len(new),
                              "total_gbp": round(sum(r["amount"] for r in new), 2)})
 
+    # Innocent background activity on other clean customers (no overlap with hosts).
+    others = rng.permutation(sorted(set(candidates) - set(map(str, hosts))))
+    business, pos = set(), 0
+    for method, share, is_business in BACKGROUND:
+        k = int(round(share * len(others)))
+        for c in others[pos:pos + k]:
+            new = getattr(p, method)(str(c))
+            for r in new:
+                r["typology"] = NORMAL
+            rows.extend(new)
+            if is_business:
+                business.add(str(c))
+        pos += k
+
     planted = pd.DataFrame(rows)
     planted["txn_id"] = [f"P{i}" for i in range(len(planted))]
 
@@ -166,8 +222,10 @@ def plant(tx: pd.DataFrame, lab: pd.DataFrame, per_pattern: int = 25,
                              "small_business", "individual"), index=customers)
     man = pd.DataFrame(manifest)
     seg[man.loc[man["typology"].isin(BUSINESS_PATTERNS), "customer_id"]] = "small_business"
+    seg[sorted(business)] = "small_business"
 
-    new_lab = pd.DataFrame({"txn_id": planted["txn_id"], "is_suspicious": True,
+    new_lab = pd.DataFrame({"txn_id": planted["txn_id"],
+                            "is_suspicious": planted["typology"] != NORMAL,
                             "source": "planted", "typology": planted["typology"]})
     planted = planted.drop(columns="typology")
     planted["customer_segment"] = "unknown"
@@ -200,7 +258,9 @@ def main() -> None:
     print(man.groupby("typology").agg(customers=("customer_id", "count"),
                                       txns=("n_txns", "sum"),
                                       total_gbp=("total_gbp", "sum")).round(0).to_string())
-    print(f"wrote {len(tx):,} transactions ({(lab['source'] == 'planted').sum():,} planted) to {args.out}/")
+    planted = lab["source"] == "planted"
+    print(f"wrote {len(tx):,} transactions: {(planted & lab['is_suspicious']).sum():,} planted "
+          f"laundering, {(planted & ~lab['is_suspicious']).sum():,} innocent background, to {args.out}/")
 
 
 if __name__ == "__main__":

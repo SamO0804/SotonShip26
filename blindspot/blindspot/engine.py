@@ -37,7 +37,7 @@ from . import schema
 CONFIG = {
     # rule_id: points
     "R01_large_cash": 10,           # cash deposit at or over the review limit
-    "R02_cash_near_limit": 1,       # cash deposit 90-99.9% of the limit  (flaw 2)
+    "R02_cash_near_limit": 1,       # repeated cash deposits just under the limit (flaw 2)
     "R03_high_risk_country": 1,     # wire/cross-border to or from a high-risk country
     "R04_large_wire": 5,            # wire/cross-border of LARGE_WIRE or more
     "R05_large_payment": 2,         # cheque/ACH/cash withdrawal of LARGE_PAYMENT or more
@@ -46,9 +46,40 @@ CONFIG = {
     "LARGE_WIRE": 50_000,
     "LARGE_PAYMENT": 25_000,
     "VELOCITY_COUNT": 15,
-    "SUPPRESS_TOP_PCT": 0.5,        # top % of small businesses by inbound £ are "valued clients"
+    "NEAR_LIMIT_REPEAT": 3,         # R02 fires from the 3rd near-limit deposit in 30 days
+    "SUPPRESS_TOP_N": 5,            # the N biggest small businesses by inbound £ are "valued clients"
     "UNMONITORED_TYPES": ["money_order"],   # flaw 1
 }
+
+
+# The bank's rule documentation: what each rule watches. This is what a bank
+# hands an auditor; Blindspot's coverage map reads it. Keep it in sync with
+# run_rules below.
+_INTL = ["wire", "cross_border"]
+_ALL = [p for p in schema.PAYMENT_TYPES if p not in CONFIG["UNMONITORED_TYPES"]]
+RULE_CATALOGUE = [
+    # rule_id, payment types, direction ("in"/"out"/"any"), kind, description
+    ("R01_large_cash", ["cash_deposit"], "in", "amount",
+     "Cash deposit at or over £10,000"),
+    ("R02_cash_near_limit", ["cash_deposit"], "in", "amount",
+     f"{CONFIG['NEAR_LIMIT_REPEAT']}+ cash deposits between £9,000 and £9,999 within 30 days"),
+    ("R03_high_risk_country", _INTL, "any", "country",
+     "Wire or cross-border payment to or from a high-risk country"),
+    ("R04_large_wire", _INTL, "any", "amount",
+     f"Wire or cross-border payment of £{CONFIG['LARGE_WIRE']:,} or more"),
+    ("R05_large_payment", ["cheque", "ach", "cash_withdrawal"], "out", "amount",
+     f"Cheque, ACH or cash withdrawal of £{CONFIG['LARGE_PAYMENT']:,} or more"),
+    ("R06_velocity", _ALL, "out", "count",
+     f"{CONFIG['VELOCITY_COUNT']}+ outbound payments in a 30-day block"),
+]
+
+
+def rule_catalogue() -> pd.DataFrame:
+    return pd.DataFrame([
+        {"rule_id": r, "points": CONFIG[r], "payment_types": types, "direction": d,
+         "kind": k, "description": desc}
+        for r, types, d, k, desc in RULE_CATALOGUE
+    ])
 
 
 def _alerts(df: pd.DataFrame, rule: str) -> pd.DataFrame:
@@ -59,6 +90,19 @@ def _alerts(df: pd.DataFrame, rule: str) -> pd.DataFrame:
         "timestamp": df["timestamp"].values,
         "txn_id": df["txn_id"].values,
     })
+
+
+def _repeated_near_limit(cash: pd.DataFrame, lim: float) -> pd.DataFrame:
+    """Cash deposits of 90-99.9% of the limit, from the NEAR_LIMIT_REPEAT-th
+    such deposit within 30 days onwards (a classic structuring scenario)."""
+    near = cash[(cash["amount"] >= 0.9 * lim) & (cash["amount"] < lim)]
+    if near.empty:
+        return near
+    # Sorted by customer then time, so the grouped rolling counts come back in row order.
+    near = near.sort_values(["customer_id", "timestamp"], kind="stable")
+    near = near.assign(_n=near.set_index("timestamp").groupby("customer_id", sort=True)["amount"]
+                       .rolling("30D").count().values)
+    return near[near["_n"] >= CONFIG["NEAR_LIMIT_REPEAT"]]
 
 
 def run_rules(tx: pd.DataFrame) -> pd.DataFrame:
@@ -73,7 +117,7 @@ def run_rules(tx: pd.DataFrame) -> pd.DataFrame:
 
     parts = [
         _alerts(cash[cash["amount"] >= lim], "R01_large_cash"),
-        _alerts(cash[(cash["amount"] >= 0.9 * lim) & (cash["amount"] < lim)], "R02_cash_near_limit"),
+        _alerts(_repeated_near_limit(cash, lim), "R02_cash_near_limit"),
         _alerts(intl[intl["sender_country"].isin(hr) | intl["receiver_country"].isin(hr)],
                 "R03_high_risk_country"),
         _alerts(intl[intl["amount"] >= CONFIG["LARGE_WIRE"]], "R04_large_wire"),
@@ -99,8 +143,7 @@ def suppression_list(tx: pd.DataFrame) -> set[str]:
     vol = sb.groupby("customer_id")["amount"].sum()
     if vol.empty:
         return set()
-    cut = vol.quantile(1 - CONFIG["SUPPRESS_TOP_PCT"] / 100)
-    return set(vol[vol >= cut].index)
+    return set(vol.nlargest(CONFIG["SUPPRESS_TOP_N"]).index)
 
 
 def score_cases(tx: pd.DataFrame, alerts: pd.DataFrame) -> pd.DataFrame:
@@ -135,13 +178,15 @@ def main() -> None:
     alerts, cases = run(tx)
     alerts.to_parquet(args.data / "alerts.parquet", index=False)
     cases.to_parquet(args.data / "cases.parquet", index=False)
+    rule_catalogue().to_parquet(args.data / "rules.parquet", index=False)
 
     print(alerts.groupby("rule_id").agg(alerts=("points", "size"),
                                         customers=("customer_id", "nunique")).to_string())
     print(f"\n{len(cases):,} customers scored, {cases['case_opened'].sum():,} cases opened, "
           f"{cases['suppressed'].sum():,} suppressed")
-    print(f"wrote alerts.parquet and cases.parquet to {args.data}/")
-    print("next: python -m blindspot.evaluate" + (f" --data {args.data}" if str(args.data) != "data" else ""))
+    print(f"wrote alerts, cases and rules to {args.data}/")
+    flag = f" --data {args.data}" if str(args.data) != "data" else ""
+    print(f"next: python -m blindspot.investigate{flag}")
 
 
 if __name__ == "__main__":
