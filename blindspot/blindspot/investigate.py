@@ -53,6 +53,7 @@ def main() -> None:
     ap.add_argument("--data", type=Path, default=Path("data"))
     args = ap.parse_args()
     d = args.data
+    print("→ simulating the bank's investigators: every case, plus a sample below the threshold")
     inv = investigate(pd.read_parquet(d / "transactions.parquet"), pd.read_parquet(d / "labels.parquet"),
                       pd.read_parquet(d / "alerts.parquet"), pd.read_parquet(d / "cases.parquet"))
     inv.to_parquet(d / "investigations.parquet", index=False)

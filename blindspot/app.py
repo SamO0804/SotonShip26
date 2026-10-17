@@ -11,10 +11,13 @@ Data folder: ./data, written by the pipeline (python -m blindspot.run_all).
 Override with:  BLINDSPOT_DATA=path/to/folder streamlit run app.py
 """
 import html
+import itertools
 import json
+import re
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -78,6 +81,28 @@ h1, h2, h3 {{ color: {INK}; letter-spacing: -0.01em; }}
 .bs-foot {{ font-size: 12px; color: {MUTED}; border-top: 1px solid {LINE}; margin-top: 32px; padding-top: 10px; }}
 .bs-quote {{ background: {ACCENT_SOFT}; padding: 1px 3px; border-radius: 3px; }}
 .bs-num {{ font-family: var(--mono); }}
+
+/* ---- Animation: plays once when a page's data first appears. CSS only. ---- */
+/* Numbers count up: an animatable integer drives a CSS counter. */
+@property --bs-n {{ syntax: '<integer>'; inherits: false; initial-value: 0; }}
+.bs-count {{ --bs-n: var(--to); counter-reset: bs-n var(--bs-n);
+             animation: bs-count 1.8s cubic-bezier(.33, 1, .68, 1) both; }}
+.bs-count::after {{ content: counter(bs-n); }}
+@keyframes bs-count {{ from {{ --bs-n: 0; }} }}
+/* Stat tiles and cards rise in, one after another. */
+.bs-stat, .bs-card {{ animation: bs-rise .5s ease-out both; }}
+@keyframes bs-rise {{ from {{ opacity: 0; transform: translateY(10px); }} }}
+/* Charts wipe in left to right once Plotly has drawn them, so bars look like
+   they grow. Clip only while animating, so hover labels aren't cut off after. */
+[data-testid="stPlotlyChart"] .js-plotly-plot {{ animation: bs-wipe 1.4s cubic-bezier(.65, 0, .35, 1) .1s backwards; }}
+@keyframes bs-wipe {{ from {{ clip-path: inset(0 100% 0 0); }} to {{ clip-path: inset(0 0 0 0); }} }}
+/* Tables fill from the top down. */
+[data-testid="stDataFrame"] {{ animation: bs-fill .9s ease-out .1s backwards; }}
+@keyframes bs-fill {{ from {{ clip-path: inset(0 0 100% 0); opacity: .4; }} to {{ clip-path: inset(0 0 0 0); opacity: 1; }} }}
+/* Anyone who has asked their computer for less motion gets none. */
+@media (prefers-reduced-motion: reduce) {{
+  *, *::before, *::after {{ animation: none !important; }}
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -125,9 +150,31 @@ def gbp(x):
     return f"£{x:,.0f}"
 
 
+_ANIM = itertools.count()          # resets every run, so each page staggers from zero
+_COUNTABLE = re.compile(r"^(£?)(\d{1,3})(%?)$")
+
+
+def delay(step=0.12, cap=0.9):
+    """Inline style that staggers the next animated element on the page."""
+    return f"animation-delay:{min(next(_ANIM) * step, cap):.2f}s"
+
+
+def counting(value, style=""):
+    """Whole numbers under 1,000 (with an optional £ or %) count up from zero.
+    Anything else (e.g. £3,844,620) is shown as it is and just fades in."""
+    m = _COUNTABLE.match(str(value))
+    if not m:
+        return html.escape(str(value))
+    pre, n, suf = m.groups()
+    return (f'<style>.bs-to-{n} {{ --to: {n}; }}</style>{pre}'
+            f'<span class="bs-count bs-to-{n}" style="{style}" aria-label="{n}"></span>{suf}')
+
+
 def stat(value, label, accent=False, eyebrow=""):
     eb = f'<div class="bs-eyebrow">{eyebrow}</div>' if eyebrow else ""
-    return f'<div class="bs-stat {"accent" if accent else ""}">{eb}<div class="v">{value}</div><div class="l">{label}</div></div>'
+    d = delay()
+    return (f'<div class="bs-stat {"accent" if accent else ""}" style="{d}">{eb}'
+            f'<div class="v">{counting(value, d)}</div><div class="l">{label}</div></div>')
 
 
 def header(eyebrow, title, point=None):
@@ -228,27 +275,74 @@ STEP_LABELS = {
 }
 
 
+STEP_ORDER = ["plant", "engine", "evaluate", "investigate", "coverage", "calibration",
+              "below_line", "advisory", "report", "evidence"]     # as in blindspot/run_all.py
+LOG_LINES = 16
+_TABLE_ROW = re.compile(r"\S {3,}\S.* {3,}\S|^\s*(rule_id|band|label|queue_rank|pattern_id|source)\b")
+
+
+def _log_html(lines):
+    """The live log: step headings bold, narration ('→') in green, raw output muted."""
+    rows = []
+    for kind, text in lines[-LOG_LINES:]:
+        t = html.escape(text)
+        if kind == "step":
+            rows.append(f'<div style="color:{INK};font-weight:700;margin-top:6px">■ {t}</div>')
+        elif kind == "say":
+            rows.append(f'<div style="color:{ACCENT}">{t}</div>')
+        else:
+            rows.append(f'<div style="color:{MUTED};white-space:nowrap;overflow:hidden;'
+                        f'text-overflow:ellipsis">{t}</div>')
+    rows = [r.replace('<div style="', '<div style="flex-shrink:0;', 1) for r in rows]   # never squash lines
+    return (f'<div style="font-family:var(--mono);font-size:12.5px;line-height:1.55;background:{BG};'
+            f'border:1px solid {LINE};border-radius:6px;padding:10px 12px;height:330px;overflow:hidden;'
+            f'display:flex;flex-direction:column;justify-content:flex-end">{"".join(rows)}</div>')
+
+
 def run_audit(rulebook_path):
     """Run the pipeline from the engine (or from planting, on a fresh test bank),
-    showing each step as it happens."""
+    narrating each step live as text."""
     start = "engine" if (DATA_DIR / "transactions.parquet").exists() else "plant"
     cmd = [sys.executable, "-m", "blindspot.run_all", "--from", start,
            "--data", str(DATA_DIR), "--rules", str(rulebook_path)]
-    with st.status("Starting the audit…", expanded=True) as status:
+    steps = STEP_ORDER[STEP_ORDER.index(start):]
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}   # stream each line as it's printed
+    with st.container(border=True):
+        heading = st.empty()
+        heading.markdown("**Starting the audit…**")
+        bar = st.progress(0.0)
+        panel = st.empty()
+        shown, log, last_draw, done = [], [], 0.0, 0
         proc = subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, bufsize=1)
-        log = []
+                                text=True, bufsize=1, env=env)
         for line in proc.stdout:
             log.append(line)
-            step = line.strip().lower()
-            if step in STEP_LABELS:
-                st.write(STEP_LABELS[step])
-                status.update(label=STEP_LABELS[step] + "…")
+            text = line.rstrip()
+            key = text.strip().lower()
+            if not text.strip() or set(text.strip()) == {"="}:
+                continue
+            if key in STEP_LABELS:
+                shown.append(("step", STEP_LABELS[key]))
+                heading.markdown(f"**{STEP_LABELS[key]}…**")
+                bar.progress(done / len(steps), text=f"Step {done + 1} of {len(steps)}: {STEP_LABELS[key]}")
+                done += 1
+                important = True
+            elif _TABLE_ROW.search(text):
+                continue        # wide table rows: kept in the full log, not the live view
+            else:
+                shown.append(("say" if text.lstrip().startswith("→") else "out", text.strip()))
+                important = text.lstrip().startswith("→")
+            now = time.time()
+            if important or now - last_draw > 0.15:
+                panel.markdown(_log_html(shown), unsafe_allow_html=True)
+                last_draw = now
         proc.wait()
+        panel.markdown(_log_html(shown), unsafe_allow_html=True)
         if proc.returncode == 0:
-            status.update(label="Audit complete", state="complete", expanded=False)
+            bar.progress(1.0, text="All steps finished")
+            heading.markdown("**Audit complete**")
             return True, "".join(log)
-        status.update(label="The audit stopped with an error", state="error")
+        heading.markdown("**The audit stopped with an error**")
         return False, "".join(log)
 
 
@@ -297,8 +391,8 @@ def page_setup():
                     "id": "Rule", "description": st.column_config.TextColumn("What it looks for", width="medium"),
                     "points": st.column_config.NumberColumn("Points", min_value=0, step=1),
                     "type": "Trigger",
-                    "amount_min": st.column_config.NumberColumn("Min £", min_value=0, format="£%,.0f"),
-                    "amount_max": st.column_config.NumberColumn("Max £", min_value=0, format="£%,.0f"),
+                    "amount_min": st.column_config.NumberColumn("Min £", min_value=0, format="£%,.2f"),
+                    "amount_max": st.column_config.NumberColumn("Max £", min_value=0, format="£%,.2f"),
                     "window_days": st.column_config.NumberColumn("Window (days)", min_value=1, step=1),
                     "min_count": st.column_config.NumberColumn("Min count", min_value=1, step=1),
                     "watches": st.column_config.TextColumn("Payments it can see", width="medium"),
@@ -333,6 +427,7 @@ def page_setup():
                 RULEBOOK_DIR.mkdir(exist_ok=True)
                 ACTIVE_RULEBOOK.write_text(yaml.safe_dump(new_raw, sort_keys=False, allow_unicode=True))
                 ok, log = run_audit(ACTIVE_RULEBOOK)
+                st.session_state.last_log = log
                 if ok:
                     st.cache_data.clear()
                     st.session_state.audit_ran = True
@@ -347,6 +442,9 @@ def page_setup():
             st.success(f"Audit complete: {facts.get('rulebook', 'rulebook')}. "
                        f"{facts.get('findings_total', 0)} findings.")
             st.page_link(OVERVIEW, label="See the results →")
+            if st.session_state.get("last_log"):
+                with st.expander("What happened during the run"):
+                    st.code(st.session_state.last_log, language=None)
         elif HAS_SAVED_RESULTS:
             st.divider()
             st.caption(f"No time to run live? The last audit ({facts.get('rulebook', 'unknown rulebook')}, "
@@ -437,7 +535,7 @@ def page_findings():
     for _, r in df.iterrows():
         sev = r.severity if r.severity in ("high", "medium") else "medium"
         st.markdown(
-            f'<div class="bs-card {sev}"><span class="bs-pill {sev}">{sev}</span>'
+            f'<div class="bs-card {sev}" style="{delay(0.06)}"><span class="bs-pill {sev}">{sev}</span>'
             f'<span class="bs-pill check">{pretty(r["check"])}</span>'
             f'<div class="t" style="margin-top:8px">{html.escape(r.title)}</div>'
             f'<div class="m">{html.escape(str(r.metric))}</div>{html.escape(r.plain_english)}'
@@ -468,7 +566,7 @@ def page_queue():
     for _, r in df.head(5).iterrows():
         tags = "".join(f'<span class="bs-tag">{html.escape(t.strip())}</span>' for t in str(r.reasons).split("|") if t.strip())
         sup = '<span class="bs-pill high">suppressed</span>' if r.suppressed else ""
-        st.markdown(f'<div class="bs-card"><span class="bs-num" style="color:{MUTED}">#{r.queue_rank}</span> '
+        st.markdown(f'<div class="bs-card" style="{delay(0.08)}"><span class="bs-num" style="color:{MUTED}">#{r.queue_rank}</span> '
                     f'<span class="t bs-num">{html.escape(str(r.customer_id))}</span> {sup}'
                     f'<div class="m">priority {r.priority} · flagged by {r.checks} check(s) · '
                     f'unusualness {r.anomaly_score:.0f}/100 · bank score {r.engine_score}'

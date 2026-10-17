@@ -189,6 +189,7 @@ def run(tx, rules, alerts, cases, patterns) -> tuple[pd.DataFrame, pd.DataFrame]
     opened = set(cases.loc[cases["case_opened"], "customer_id"])
     rows, findings = [], []
     for p in patterns:
+        print(f"→ searching {len(tx):,} transactions for: {p['name']}")
         custs, hit_tx = match(tx, p)
         scope = rules_in_scope(rules, p)
         with_case = custs & opened
@@ -253,7 +254,10 @@ def main() -> None:
 
     saved = d / "advisory_patterns.json"
     try:
+        print(f"→ asking the LLM to read {args.advisory.name} and turn each red flag into a "
+              f"testable pattern (it sees only the alert text)")
         raw = extract(args.advisory.read_text())
+        print("→ code is checking every pattern the LLM returned")
         patterns, untestable, warnings = validate(raw)
         print(f"LLM extracted {len(raw.get('patterns', []))} patterns; "
               f"{len(patterns)} passed validation")

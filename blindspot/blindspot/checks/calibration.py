@@ -93,7 +93,8 @@ def findings(cal: pd.DataFrame, alerts: pd.DataFrame,
             "title": (f"Strong red flag worth only {r['points']} point"
                       f"{'s' if r['points'] != 1 else ''}: {r['rule_id']}" if under else
                       f"Weak rule over-weighted: {r['rule_id']}"),
-            "metric": (f"{r['points']} pts, right {100 * r['hit_rate']:.1f}% of the time "
+            "metric": (f"{r['points']} pt{'s' if r['points'] != 1 else ''}, right "
+                       f"{100 * r['hit_rate']:.1f}% of the time "
                        f"({100 * r['ci_low']:.0f}-{100 * r['ci_high']:.0f}%, n={r['investigated']})"),
             "evidence_ids": list(ev),
             "suggested_fix": (f"Raise {r['rule_id']} from {r['points']} to about "
@@ -125,6 +126,8 @@ def main() -> None:
 
     rb = rbk.used(d)   # the bank's own case threshold, if the engine recorded its rulebook
     threshold = rb["case_threshold"] if rb else schema.CASE_THRESHOLD
+    print(f"→ comparing each rule's points with how often investigators found laundering "
+          f"({len(inv):,} investigations)")
     cal = calibration_table(alerts, rules, inv, threshold)
     fnd = findings(cal, alerts, threshold)
     cal.to_parquet(d / "calibration.parquet", index=False)

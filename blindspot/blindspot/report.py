@@ -262,6 +262,7 @@ def main() -> None:
     d = args.data
 
     findings = load_findings(d)
+    print("→ combining the four checks into one review list")
     queue = review_queue(d)
     f = facts(d, findings, queue)
 
@@ -271,7 +272,10 @@ def main() -> None:
                                  f"{f['review_queue_customers']:,} customers recommended "
                                  f"for review."), "code", 0
     else:
+        print(f"→ asking the LLM to rewrite {len(findings)} findings in plain English "
+              f"(it sees titles and totals only, never customers)")
         findings, rejected = rewrite_findings(findings)
+        print("→ asking the LLM for a board summary; code rejects any number it wasn't given")
         summary, by = executive_summary(f)
 
     findings.to_parquet(d / "findings.parquet", index=False)

@@ -279,6 +279,7 @@ def main() -> None:
     args = ap.parse_args()
     d = args.data
 
+    print("→ linking each customer on the review list to the payments behind their reasons")
     ev, queue = build(d)
     ev.to_parquet(d / "evidence.parquet", index=False)
     queue.to_parquet(d / "review_queue.parquet", index=False)

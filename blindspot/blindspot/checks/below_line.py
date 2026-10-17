@@ -166,7 +166,9 @@ def reasons(f: pd.DataFrame, ids, top: int = 3) -> dict[str, str]:
 
 def run(tx: pd.DataFrame, cases: pd.DataFrame, top_n: int = 50,
         threshold: int = schema.CASE_THRESHOLD) -> tuple[pd.DataFrame, pd.DataFrame]:
+    print(f"→ building 16 behaviour measures for each of {tx['customer_id'].nunique():,} customers")
     f = customer_features(tx)
+    print("→ training the anomaly model (IsolationForest, 300 trees); it never sees the answers")
     score = fit_scores(f)
 
     res = cases.set_index("customer_id").join(score.rename("anomaly_score"), how="inner")
@@ -174,6 +176,8 @@ def run(tx: pd.DataFrame, cases: pd.DataFrame, top_n: int = 50,
     below = res[~res["case_opened"]].sort_values("anomaly_score", ascending=False)
     below["rank"] = np.arange(1, len(below) + 1)
     top = below.head(top_n)
+    print(f"→ ranking the {len(below):,} customers the bank never opened a case on; "
+          f"explaining the top {top_n}")
     why = reasons(f, top["customer_id"])
     below["reasons"] = below["customer_id"].map(why).fillna("")
 

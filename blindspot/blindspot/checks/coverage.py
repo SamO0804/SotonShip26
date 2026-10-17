@@ -104,6 +104,7 @@ def main() -> None:
     rules = pd.read_parquet(d / "rules.parquet")
     alerts = pd.read_parquet(d / "alerts.parquet")
 
+    print(f"→ comparing {len(tx):,} transactions with the payment types each rule can see")
     cov = coverage_table(tx, rules, alerts)
     fnd = findings(cov, tx)
     cov.to_parquet(d / "coverage.parquet", index=False)

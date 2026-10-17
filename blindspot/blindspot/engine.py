@@ -97,8 +97,11 @@ def _blocks(t: pd.DataFrame, trig: dict, start: pd.Timestamp) -> pd.DataFrame:
 def run_rules(tx: pd.DataFrame, rb: dict) -> pd.DataFrame:
     start = tx["timestamp"].min()
     parts = []
+    on = [r for r in rb["rules"] if r["enabled"]]
+    print(f"→ checking {len(tx):,} transactions against {len(on)} of the bank's rules")
     for rule in rb["rules"]:
         if not rule["enabled"]:
+            print(f"→ {rule['id']} is switched off")
             continue
         t = _matching(tx, rule)
         trig = rule["trigger"]
@@ -109,6 +112,7 @@ def run_rules(tx: pd.DataFrame, rb: dict) -> pd.DataFrame:
         else:
             hit = _blocks(t, trig, start)
         parts.append(_alerts(hit, rule))
+        print(f"→ {rule['id']} ({rule['description']}): fired {len(hit):,} times")
     alerts = pd.concat(parts, ignore_index=True) if parts else schema.empty(schema.ALERTS)
     return schema.conform(alerts, schema.ALERTS, "alerts")
 
@@ -143,6 +147,8 @@ def score_cases(tx: pd.DataFrame, alerts: pd.DataFrame, rb: dict) -> pd.DataFram
 
 def run(tx: pd.DataFrame, rb: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
     alerts = run_rules(tx, rb)
+    print(f"→ adding up each customer's points over rolling {rb['window_days']}-day windows; "
+          f"a case opens at {rb['case_threshold']}")
     return alerts, score_cases(tx, alerts, rb)
 
 
