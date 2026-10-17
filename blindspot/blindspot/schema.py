@@ -47,9 +47,11 @@ SEVERITIES = ["high", "medium", "low"]
 TRANSACTIONS = {
     "txn_id": "string",            # unique; SAML-D rows "S<row>", planted "P<n>"
     "timestamp": "datetime64[ns]",
-    "sender_id": "string",         # sender account = customer for monitoring
+    "customer_id": "string",       # the bank customer this transaction is monitored under
+    "direction": "category",       # "in" (money arriving at customer) or "out"
+    "sender_id": "string",
     "receiver_id": "string",
-    "amount": "float64",           # one base currency (see README)
+    "amount": "float64",           # GBP
     "payment_type": "category",    # one of PAYMENT_TYPES
     "sender_country": "string",
     "receiver_country": "string",
@@ -99,6 +101,15 @@ CASE_THRESHOLD = 20       # points needed to open a case
 WINDOW_DAYS = 396         # 13 months
 SEED = 42                 # fix everywhere for a reproducible demo
 
+# UK limits, in GBP. These are the fictional bank's INTERNAL policy limits,
+# chosen to mirror the Bank of America case. They are assumptions, not
+# statutory UK thresholds; say so if a judge asks.
+MONEY_ORDER_ID_LIMIT = 2_500   # ID check on money/postal order deposits (BoA: $3,000)
+CASH_REVIEW_LIMIT = 10_000     # cash deposit review limit (BoA: $10,000 CTR)
+
+# Countries the replica and planting treat as high risk.
+HIGH_RISK_COUNTRIES = ["Belarus", "Georgia", "UAE", "Turkey", "Morocco", "Mexico"]
+
 # Headline definition (agree as a team; do not change mid-build):
 # A suspicious customer counts as CAUGHT if the engine opened a case for them
 # (case_opened is True). Measured at customer level, not transaction level.
@@ -146,7 +157,7 @@ def headline(labels: pd.DataFrame, transactions: pd.DataFrame, cases: pd.DataFra
     if source:
         lab = lab[lab["source"] == source]
     sus_customers = set(
-        transactions.loc[transactions["txn_id"].isin(lab["txn_id"]), "sender_id"]
+        transactions.loc[transactions["txn_id"].isin(lab["txn_id"]), "customer_id"]
     )
     caught = set(cases.loc[cases["case_opened"], "customer_id"]) & sus_customers
     total = len(sus_customers)

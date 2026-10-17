@@ -3,7 +3,8 @@
 Usage:
     python -m blindspot.normalise path/to/SAML-D.csv --customers 20000
 
-Writes data/transactions.parquet and data/labels.parquet.
+Writes data/base/transactions.parquet and data/base/labels.parquet
+(clean SAML-D, before planting). Amounts are treated as GBP.
 
 Sampling is by CUSTOMER, not by transaction: we keep every transaction for
 the chosen sender accounts, so laundering patterns stay intact. All senders
@@ -66,13 +67,17 @@ def convert(raw: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         raise ValueError(f"unmapped SAML-D payment types: {unknown} - add to PAYMENT_MAP")
 
     txn_id = "S" + raw.index.astype(str)
+    mapped = pt.map(PAYMENT_MAP)
     tx = pd.DataFrame({
         "txn_id": txn_id,
         "timestamp": pd.to_datetime(raw["Date"].astype(str) + " " + raw["Time"].astype(str)),
+        # SAML-D is sender-centric: the sender account is the bank's customer.
+        "customer_id": raw["Sender_account"].astype(str),
+        "direction": np.where(mapped == "cash_deposit", "in", "out"),
         "sender_id": raw["Sender_account"].astype(str),
         "receiver_id": raw["Receiver_account"].astype(str),
         "amount": raw["Amount"].astype(float),
-        "payment_type": pt.map(PAYMENT_MAP),
+        "payment_type": mapped,
         "sender_country": raw["Sender_bank_location"].astype(str),
         "receiver_country": raw["Receiver_bank_location"].astype(str),
         "customer_segment": "unknown",
@@ -112,7 +117,7 @@ def main() -> None:
     ap.add_argument("csv", type=Path)
     ap.add_argument("--customers", type=int, default=20000,
                     help="number of clean sender accounts to sample")
-    ap.add_argument("--out", type=Path, default=Path("data"))
+    ap.add_argument("--out", type=Path, default=Path("data/base"))
     args = ap.parse_args()
     tx, lab = load_samld(args.csv, args.customers)
     args.out.mkdir(parents=True, exist_ok=True)
