@@ -26,7 +26,8 @@ PAYMENT_TYPES = [
     "cheque",
     "money_order",   # not in SAML-D; created by the planting step
     "ach",
-    "credit_card",
+    "credit_card",   # spending with a card (SAML-D's meaning)
+    "card_repayment",  # paying off a credit card account (own or someone else's)
     "debit_card",
     "cross_border",
     "wire",          # planted Belarus/Georgia wires

@@ -1,0 +1,232 @@
+{
+  "facts": {
+    "customers_monitored": 50500,
+    "cases_opened": 3444,
+    "customers_suppressed": 5,
+    "pct_money_watched_by_amount_or_country_rule": 57.6,
+    "unmonitored_payment_types": [
+      "Money order deposits (in)"
+    ],
+    "unmonitored_money_gbp": 3844620,
+    "findings_total": 11,
+    "findings_high": 6,
+    "review_queue_customers": 179,
+    "findings": [
+      {
+        "id": "CV1",
+        "check": "coverage",
+        "severity": "high",
+        "title": "Money order deposits (in) are not monitored at all",
+        "metric": "0% monitored: \u00a33,844,620 across 7,722 transactions"
+      },
+      {
+        "id": "BL1",
+        "check": "below_line",
+        "severity": "high",
+        "title": "50 customers with no case look highly unusual",
+        "metric": "top 50 of 47,056 unflagged customers"
+      },
+      {
+        "id": "BL3",
+        "check": "below_line",
+        "severity": "high",
+        "title": "The valued-client list hides highly unusual customers",
+        "metric": "5 of 5 suppressed customers in the top 2% most unusual"
+      },
+      {
+        "id": "CA2",
+        "check": "calibration",
+        "severity": "high",
+        "title": "Strong red flag worth only 1 point: R02_cash_near_limit",
+        "metric": "1 pts, right 26.9% of the time (19-37%, n=93)"
+      },
+      {
+        "id": "AD1",
+        "check": "advisory",
+        "severity": "high",
+        "title": "Advisory pattern not caught: Business credit\u2011card repayments to many individuals",
+        "metric": "25 customers match; 4% have a case; \u00a32,115,842"
+      },
+      {
+        "id": "AD2",
+        "check": "advisory",
+        "severity": "high",
+        "title": "Advisory pattern not caught: Multiple small money orders paid in same day",
+        "metric": "25 customers match; 4% have a case; \u00a3668,454"
+      },
+      {
+        "id": "CV2",
+        "check": "coverage",
+        "severity": "medium",
+        "title": "Credit card payments (out) are only checked by a transaction count",
+        "metric": "only R06_velocity: \u00a33,095,313,643"
+      },
+      {
+        "id": "CV3",
+        "check": "coverage",
+        "severity": "medium",
+        "title": "Debit card payments (out) are only checked by a transaction count",
+        "metric": "only R06_velocity: \u00a33,085,585,977"
+      },
+      {
+        "id": "CV4",
+        "check": "coverage",
+        "severity": "medium",
+        "title": "Credit card repayments (out) are only checked by a transaction count",
+        "metric": "only R06_velocity: \u00a363,913,161"
+      },
+      {
+        "id": "CA1",
+        "check": "calibration",
+        "severity": "medium",
+        "title": "Weak rule over-weighted: R01_large_cash",
+        "metric": "10 pts, right 2.0% of the time (1-4%, n=541)"
+      },
+      {
+        "id": "CA3",
+        "check": "calibration",
+        "severity": "medium",
+        "title": "Weak rule over-weighted: R04_large_wire",
+        "metric": "5 pts, right 3.7% of the time (3-5%, n=1023)"
+      }
+    ]
+  },
+  "executive_summary": "The review of 50,500 monitored customers identified 11 findings, of which six are high severity, indicating the AML monitoring is insufficient. The most serious gaps are the complete lack of monitoring for money order deposits (in) \u2013 0% coverage of \u00a33,844,620 across 7,722 transactions \u2013 and the hidden risk in the valued\u2011client list where all five suppressed customers sit in the top 2% most unusual, plus 50 unflagged customers appearing highly unusual. With only 57.6% of money watched by amount or country rule and a review queue of 179 customers, the next step is to implement monitoring for the unmonitored payment type and reassess the valued\u2011client and suppression processes.",
+  "summary_written_by": "llm",
+  "validation_uses_planted_answers": {
+    "planted": {
+      "suspicious_customers": 125,
+      "caught_by_bank": 23,
+      "bank_pct": 18.4,
+      "missed_by_bank": 102,
+      "found_by_blindspot": 79,
+      "blindspot_pct_of_missed": 77.5,
+      "combined_pct": 81.6,
+      "by_typology": {
+        "credit_card_funnel": {
+          "customers": 25,
+          "bank": 1,
+          "blindspot_found": 24
+        },
+        "high_risk_wires": {
+          "customers": 25,
+          "bank": 19,
+          "blindspot_found": 6
+        },
+        "slow_burn": {
+          "customers": 25,
+          "bank": 0,
+          "blindspot_found": 2
+        },
+        "structured_cash": {
+          "customers": 25,
+          "bank": 2,
+          "blindspot_found": 23
+        },
+        "structured_money_orders": {
+          "customers": 25,
+          "bank": 1,
+          "blindspot_found": 24
+        }
+      }
+    },
+    "samld": {
+      "suspicious_customers": 500,
+      "caught_by_bank": 182,
+      "bank_pct": 36.4,
+      "missed_by_bank": 318,
+      "found_by_blindspot": 4,
+      "blindspot_pct_of_missed": 1.3,
+      "combined_pct": 37.2,
+      "by_typology": {
+        "behavioural_change_1": {
+          "customers": 6,
+          "bank": 6,
+          "blindspot_found": 0
+        },
+        "behavioural_change_2": {
+          "customers": 6,
+          "bank": 6,
+          "blindspot_found": 0
+        },
+        "bipartite": {
+          "customers": 5,
+          "bank": 1,
+          "blindspot_found": 0
+        },
+        "cash_withdrawal": {
+          "customers": 12,
+          "bank": 2,
+          "blindspot_found": 0
+        },
+        "cycle": {
+          "customers": 47,
+          "bank": 21,
+          "blindspot_found": 0
+        },
+        "deposit_send": {
+          "customers": 60,
+          "bank": 25,
+          "blindspot_found": 3
+        },
+        "fan_in": {
+          "customers": 33,
+          "bank": 8,
+          "blindspot_found": 0
+        },
+        "fan_out": {
+          "customers": 1,
+          "bank": 0,
+          "blindspot_found": 0
+        },
+        "gather_scatter": {
+          "customers": 17,
+          "bank": 9,
+          "blindspot_found": 0
+        },
+        "layered_fan_in": {
+          "customers": 45,
+          "bank": 13,
+          "blindspot_found": 0
+        },
+        "layered_fan_out": {
+          "customers": 26,
+          "bank": 7,
+          "blindspot_found": 0
+        },
+        "over_invoicing": {
+          "customers": 6,
+          "bank": 1,
+          "blindspot_found": 0
+        },
+        "scatter_gather": {
+          "customers": 19,
+          "bank": 6,
+          "blindspot_found": 0
+        },
+        "single_large": {
+          "customers": 4,
+          "bank": 3,
+          "blindspot_found": 0
+        },
+        "smurfing": {
+          "customers": 10,
+          "bank": 5,
+          "blindspot_found": 1
+        },
+        "stacked_bipartite": {
+          "customers": 23,
+          "bank": 7,
+          "blindspot_found": 0
+        },
+        "structuring": {
+          "customers": 180,
+          "bank": 62,
+          "blindspot_found": 0
+        }
+      }
+    },
+    "queue_precision_pct": 46.4,
+    "base_rate_pct": 0.89
+  }
+}

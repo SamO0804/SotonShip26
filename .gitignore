@@ -1,2 +1,4 @@
 /SAML-D.csv
 /Fraud Detection Dataset.csv
+.env
+/blindspot/.env

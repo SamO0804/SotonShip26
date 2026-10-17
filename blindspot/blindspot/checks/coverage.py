@@ -29,7 +29,7 @@ from .. import schema
 NICE = {
     "cash_deposit": "Cash deposits", "cash_withdrawal": "Cash withdrawals",
     "cheque": "Cheques", "money_order": "Money order deposits", "ach": "ACH payments",
-    "credit_card": "Credit card payments", "debit_card": "Debit card payments",
+    "credit_card": "Credit card payments", "card_repayment": "Credit card repayments", "debit_card": "Debit card payments",
     "cross_border": "Cross-border payments", "wire": "Wires",
 }
 

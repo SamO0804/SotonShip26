@@ -1,3 +1,4 @@
 data/*.parquet
 __pycache__/
 SAML-D.csv
+.env

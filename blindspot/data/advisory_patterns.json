@@ -1,0 +1,52 @@
+{
+  "advisory": "advisories/third_party_card_repayments.md",
+  "patterns": [
+    {
+      "assumptions": "Assume at least ten distinct cardholders over a 90\u2011day window; each repayment between \u00a3250\u2011\u00a32,500",
+      "direction": "out",
+      "payment_types": [
+        "card_repayment"
+      ],
+      "segment": "small_business",
+      "countries": [],
+      "amount_min": 250,
+      "amount_max": 2500,
+      "window_days": 90,
+      "min_count": 10,
+      "min_distinct_counterparties": 10,
+      "min_total": 0,
+      "max_total": 1000000000000000.0,
+      "min_windows": 1,
+      "id": "business_card_repayment_mules",
+      "name": "Business credit\u2011card repayments to many individuals",
+      "red_flag_quote": "repayments to the credit cards of many different individuals, typically ten or more"
+    },
+    {
+      "assumptions": "Assume at least two money orders per day, combined total <\u00a32,500, repeated on at least two separate days",
+      "direction": "in",
+      "payment_types": [
+        "money_order"
+      ],
+      "segment": "small_business",
+      "countries": [],
+      "amount_min": 0,
+      "amount_max": 2500,
+      "window_days": 1,
+      "min_count": 2,
+      "min_distinct_counterparties": 1,
+      "min_total": 0,
+      "max_total": 2500,
+      "min_windows": 2,
+      "id": "business_money_order_split",
+      "name": "Multiple small money orders paid in same day",
+      "red_flag_quote": "several money orders on the same day whose combined value is just below \u00a32,500"
+    }
+  ],
+  "untestable": [
+    {
+      "red_flag": "Credit card repayments follow shortly after cash or money order deposits into the same account",
+      "reason": "Requires detecting ordered sequence of different transaction types, which cannot be expressed with current pattern fields"
+    }
+  ],
+  "warnings": []
+}

@@ -39,6 +39,7 @@ SMALL_BUSINESS_SHARE = 0.2
 # Innocent background activity: (method, share of remaining clean customers, is_business)
 BACKGROUND = [
     ("bg_money_orders", 0.04, False),
+    ("bg_card_repayments", 0.10, False),
     ("bg_business_cash", 0.03, True),
     ("bg_wires", 0.02, True),
 ]
@@ -116,7 +117,7 @@ class Planter:
             person = self._uid("CARD_")
             for _ in range(int(self.rng.integers(1, 4))):
                 rows.append(self._row(self._time(a, b), c, "out", c, person,
-                                      self.rng.uniform(300, 2_500), "credit_card"))
+                                      self.rng.uniform(300, 2_500), "card_repayment"))
         return rows
 
     def structured_cash(self, c: str) -> list[dict]:
@@ -161,6 +162,17 @@ class Planter:
             amt = max(200.0, self.rng.normal(typical, typical * 0.35))
             rows.append(self._row(ts, c, "in", c, c, amt, "cash_deposit"))
             ts += pd.Timedelta(days=int(self.rng.integers(5, 10)))
+        return rows
+
+    def bg_card_repayments(self, c: str) -> list[dict]:
+        """Someone paying off their own credit card (sometimes two) each month."""
+        cards = [self._uid("CARD_") for _ in range(int(self.rng.integers(1, 3)))]
+        rows, ts = [], self.start + pd.Timedelta(days=int(self.rng.integers(0, 30)))
+        while ts < self.end:
+            for card in cards:
+                rows.append(self._row(ts, c, "out", c, card,
+                                      self.rng.uniform(50, 1_500), "card_repayment"))
+            ts += pd.Timedelta(days=int(self.rng.integers(26, 35)))
         return rows
 
     def bg_wires(self, c: str) -> list[dict]:
