@@ -1,0 +1,6 @@
+pandas>=2.0
+pyarrow>=14
+numpy
+scikit-learn
+streamlit
+plotly

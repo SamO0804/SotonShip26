@@ -1,0 +1,61 @@
+Time,Date,Sender_account,Receiver_account,Amount,Sender_bank_location,Receiver_bank_location,Payment_type,Is_laundering,Laundering_type
+13:00:00,2023-02-02,1011,9002,3940.95,UK,UK,ACH,0,Normal_Small_Fan_Out
+11:00:00,2023-10-10,1001,9011,1324.06,UK,UK,Cash Withdrawal,0,Normal_Small_Fan_Out
+22:00:00,2023-08-27,1005,9001,906.54,UK,Turkey,Cheque,0,Normal_Small_Fan_Out
+04:00:00,2023-06-10,1008,9012,316.47,UK,Turkey,ACH,0,Normal_Small_Fan_Out
+01:00:00,2023-06-08,1005,9012,146.99,UK,UK,Debit card,0,Normal_Small_Fan_Out
+09:00:00,2023-11-10,1005,9001,611.82,UK,UAE,Credit card,0,Normal_Small_Fan_Out
+08:00:00,2023-02-01,1001,9015,1028.09,UK,UK,Cross-border,1,Structuring
+12:00:00,2023-09-12,1004,9008,9150.06,UK,UAE,Cross-border,0,Normal_Small_Fan_Out
+12:00:00,2023-03-15,1002,9015,1282.2,UK,Turkey,Debit card,0,Normal_Small_Fan_Out
+08:00:00,2023-02-04,1003,9000,3566.31,UK,UK,Credit card,0,Normal_Small_Fan_Out
+03:00:00,2023-07-12,1008,9003,602.35,UK,UK,Cheque,0,Normal_Small_Fan_Out
+02:00:00,2023-12-23,1007,9009,264.56,UK,UK,Cheque,0,Normal_Small_Fan_Out
+13:00:00,2023-09-26,1007,9003,344.42,UK,UK,Cash Deposit,0,Normal_Small_Fan_Out
+19:00:00,2023-10-05,1004,9006,459.31,UK,Turkey,Cheque,0,Normal_Small_Fan_Out
+21:00:00,2023-09-19,1011,9013,14103.29,UK,UK,Cross-border,0,Normal_Small_Fan_Out
+21:00:00,2023-10-14,1001,9002,409.25,UK,UK,Cheque,0,Normal_Small_Fan_Out
+07:00:00,2023-07-07,1004,9013,2999.46,UK,Turkey,Cash Deposit,0,Normal_Small_Fan_Out
+18:00:00,2023-02-16,1001,9002,371.11,UK,UK,Credit card,0,Normal_Small_Fan_Out
+12:00:00,2023-11-03,1004,9003,3353.93,UK,UK,Cross-border,0,Normal_Small_Fan_Out
+09:00:00,2023-06-14,1011,9011,1740.52,UK,UK,Cross-border,1,Structuring
+15:00:00,2023-07-02,1004,9015,908.72,UK,UK,Cash Withdrawal,0,Normal_Small_Fan_Out
+08:00:00,2023-05-16,1010,9003,1044.28,UK,UAE,ACH,1,Structuring
+15:00:00,2023-03-08,1005,9005,499.82,UK,UK,ACH,0,Normal_Small_Fan_Out
+06:00:00,2023-12-05,1008,9018,1872.98,UK,Turkey,Cash Withdrawal,0,Normal_Small_Fan_Out
+06:00:00,2023-10-13,1005,9019,635.25,UK,UK,Cash Withdrawal,0,Normal_Small_Fan_Out
+00:00:00,2023-08-24,1003,9011,251.96,UK,UK,Cash Withdrawal,0,Normal_Small_Fan_Out
+21:00:00,2023-05-27,1009,9008,236.62,UK,Turkey,Cross-border,0,Normal_Small_Fan_Out
+07:00:00,2023-10-28,1011,9006,1348.98,UK,Turkey,Debit card,0,Normal_Small_Fan_Out
+01:00:00,2023-07-19,1003,9012,7294.75,UK,UK,Debit card,1,Structuring
+20:00:00,2023-06-11,1009,9011,1328.74,UK,UK,Debit card,1,Structuring
+10:00:00,2023-06-14,1003,9005,951.11,UK,UK,Cross-border,0,Normal_Small_Fan_Out
+22:00:00,2023-03-24,1008,9000,1545.33,UK,UK,Cash Deposit,0,Normal_Small_Fan_Out
+15:00:00,2023-02-03,1009,9003,5256.4,UK,UK,Cross-border,0,Normal_Small_Fan_Out
+10:00:00,2023-07-22,1005,9019,1426.9,UK,UAE,Cash Deposit,0,Normal_Small_Fan_Out
+01:00:00,2023-11-21,1008,9008,669.74,UK,Turkey,ACH,0,Normal_Small_Fan_Out
+07:00:00,2023-01-24,1003,9009,4136.26,UK,UK,Credit card,0,Normal_Small_Fan_Out
+06:00:00,2023-11-10,1000,9009,1834.46,UK,UAE,Cheque,0,Normal_Small_Fan_Out
+02:00:00,2023-10-30,1001,9015,6925.1,UK,UK,Cash Withdrawal,0,Normal_Small_Fan_Out
+00:00:00,2023-04-12,1005,9001,1366.33,UK,UAE,Cash Withdrawal,1,Structuring
+13:00:00,2023-08-19,1010,9001,252.3,UK,UK,Debit card,0,Normal_Small_Fan_Out
+07:00:00,2023-03-02,1001,9005,212.34,UK,UK,Cheque,0,Normal_Small_Fan_Out
+16:00:00,2023-10-04,1005,9009,7951.48,UK,Turkey,Cheque,0,Normal_Small_Fan_Out
+16:00:00,2023-09-13,1008,9013,8676.72,UK,UK,Cross-border,0,Normal_Small_Fan_Out
+09:00:00,2023-05-10,1002,9009,884.11,UK,UK,Cash Withdrawal,0,Normal_Small_Fan_Out
+18:00:00,2023-01-25,1008,9008,692.41,UK,UK,Cross-border,1,Structuring
+07:00:00,2023-12-21,1003,9018,6334.29,UK,Turkey,Cross-border,0,Normal_Small_Fan_Out
+16:00:00,2023-06-12,1009,9003,290.48,UK,UAE,Credit card,0,Normal_Small_Fan_Out
+23:00:00,2023-11-22,1006,9011,374.78,UK,Turkey,Cash Withdrawal,0,Normal_Small_Fan_Out
+10:00:00,2023-09-05,1006,9010,2373.19,UK,UK,Cash Withdrawal,0,Normal_Small_Fan_Out
+02:00:00,2023-10-12,1002,9009,682.99,UK,UK,Cash Withdrawal,0,Normal_Small_Fan_Out
+08:00:00,2023-10-05,1005,9016,1089.91,UK,UAE,Credit card,0,Normal_Small_Fan_Out
+01:00:00,2023-03-13,1010,9005,901.33,UK,UAE,Cash Withdrawal,0,Normal_Small_Fan_Out
+19:00:00,2023-05-13,1000,9019,1644.33,UK,Turkey,ACH,0,Normal_Small_Fan_Out
+08:00:00,2023-06-20,1009,9006,5937.11,UK,UK,Cash Deposit,0,Normal_Small_Fan_Out
+16:00:00,2023-07-01,1005,9010,1222.56,UK,UAE,ACH,1,Structuring
+23:00:00,2023-01-16,1008,9010,2374.94,UK,UK,Cash Deposit,1,Structuring
+11:00:00,2023-07-19,1007,9016,93.67,UK,UK,Credit card,0,Normal_Small_Fan_Out
+07:00:00,2023-02-26,1005,9008,1034.36,UK,Turkey,Cash Deposit,0,Normal_Small_Fan_Out
+07:00:00,2023-09-29,1003,9005,398.67,UK,UK,Cash Withdrawal,0,Normal_Small_Fan_Out
+07:00:00,2023-09-07,1007,9000,254.02,UK,UAE,Cash Withdrawal,0,Normal_Small_Fan_Out
